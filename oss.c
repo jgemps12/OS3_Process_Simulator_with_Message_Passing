@@ -203,21 +203,15 @@ int main(int argc, char** argv) {
 
 		  break;
 	       }
-            }
-            //else {
-	      // continue;
-           // }	       
+            }  
          }
-
-	 //else {
-           // continue;
-	// }
 
 	 
 	 // Work with child process. Send [timeLimitForChildren] to worker.c to execute the child process.
          if (processID == 0) {
             *secondsShared = systemClockSeconds;
             *nanosecondsShared = systemClockNano;
+
 
 	    // Stores randomized child process run times into strings to facilatate execl()'s operation.
             int randomSeconds = randomizeChildSecondsLimit(timeLimitForChildren);
@@ -228,6 +222,7 @@ int main(int argc, char** argv) {
 
 	    sprintf(randomizedTimeSeconds, "%d", randomSeconds);
 	    sprintf(randomizedTimeNanoseconds, "%ld", randomNanoseconds);
+
 
 	    // Run child processes.
 	    execl("./worker", "worker", randomizedTimeSeconds, randomizedTimeNanoseconds, NULL);
