@@ -50,16 +50,17 @@ struct PCB {
 struct PCB processTable[20];
 
 
-// Initialization of simulated system time. Increments in a way that makes the simulated system time appear similar to real time.
-int systemClockSeconds = 0;
-long int systemClockNano = 0;
-
-int systemClockIncrement = 1000;
-
-
 // Places nanosecond values into variables for easier code readability.
 long int halfBillionNanoseconds = 500000000;
 long int oneBillionNanoseconds = 1000000000;
+long int oneQuarterSecond = 250000000;
+
+// Initialization of simulated system time. Increments in a way that makes the simulated system time appear similar to real time.
+int systemClockSeconds = 0;
+long long int systemClockNano = 0;
+
+long int systemClockIncrement = oneQuarterSecond;
+//int systemClockIncrement = 1000;
 
 
 // Uses system nanoseconds to determine when next process should launch.
@@ -72,7 +73,7 @@ int nextLaunchTimeSeconds = 0;
 // Function prototypes.
 void checkForOptargEntryError(int, char []);
 void checkForSimulExceedsProcError(int, int);
-void incrementClock(int *, long int *, int);
+void incrementClock(int *, long long int *, int);
 int randomizeChildSecondsLimit(int);
 long int randomizeChildNanoseconds(int, int);
 long long int determineNextLaunchNanoseconds(int, long long int);
@@ -184,8 +185,14 @@ int main(int argc, char** argv) {
 
 
    while (processesFinished == false) {
-      incrementClock(&systemClockSeconds, &systemClockNano, systemClockIncrement);
-      
+      incrementClock(&systemClockSeconds, &systemClockNano, childrenActive);
+     // sleep(0.5); 
+      //
+      //
+      //printf("childrenActive: %d \t systemClockSeconds: %d\t systemClockNano: %Lf\n", childrenActive, systemClockSeconds, systemClockNano);
+           //printf("\tnextLaunchTimeNano: %Lf  systemClockIncrement: %Lf \t oneQuarterSecond: %Lf\n\n", nextLaunchTimeNano, systemClockIncrement, (long double) oneQuarterSecond);
+
+
       // System time in shared memory constantly updates in loop.
       *secondsShared = systemClockSeconds;
       *nanosecondsShared = systemClockNano;
@@ -203,7 +210,9 @@ int main(int argc, char** argv) {
 
 
          // Spinlocks ('while' and 'for' loops) prevent multiple Process Tables from printing out in short time bursts.
-         while (systemClockNano - nextLaunchTimeNano != systemClockIncrement) {
+         while (systemClockNano - nextLaunchTimeNano != (long double) oneQuarterSecond) {
+	 //while (systemClockNano <= nextLaunchTimeNano) {  
+	//do {
 	   int i;
 	   for (i = 0; i < 500; i++) {
  	      // Do nothing.
@@ -213,12 +222,18 @@ int main(int argc, char** argv) {
 	   if (systemClockNano == halfBillionNanoseconds || systemClockNano == 0) {
               printProcessTable();
            }
-	   incrementClock(&systemClockSeconds, &systemClockNano, systemClockIncrement);
+	   incrementClock(&systemClockSeconds, &systemClockNano, childrenActive);
+           printf("childrenActive: %d \t systemClockSeconds: %d\t systemClockNano: %lld\n", childrenActive, systemClockSeconds, systemClockNano);
+           printf("\tnextLaunchTimeNano: %lld systemClockIncrement: %ld \t oneQuarterSecond: %ld\n\n", nextLaunchTimeNano,  systemClockIncrement, oneQuarterSecond);
 
+           long int difference = systemClockNano - nextLaunchTimeNano;
+           printf("Difference: %ld, oneQuarterSecond: %ld\n", difference, oneQuarterSecond);
 
            // Launches a child based on [intervalInMSToLaunchChildren].
-	   if (systemClockNano - nextLaunchTimeNano == systemClockIncrement) {
-               if (systemClockNano != 0) {
+	   if (systemClockNano - nextLaunchTimeNano == (long double) oneQuarterSecond) {
+		  printf("LAUNCHEDDDDDDDDD\n\n\n");
+           //if (systemClockNano >= nextLaunchTimeNano) {
+//      	      if (systemClockNano != 0) {
 	          processID = fork();
               
 	          nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, currentLaunchTimeNano);
@@ -226,10 +241,11 @@ int main(int argc, char** argv) {
 
 		  break;
 	       }
-            }  
+  //          }  
          }
+//	 while (systemClockNano < nextLaunchTimeNano);
+         //while (systemClockNano - nextLaunchTimeNano < systemClockIncrement);        
 
-	 
 	 // Work with child process. Send [timeLimitForChildren] to worker.c to execute the child process.
          if (processID == 0) {
             *secondsShared = systemClockSeconds;
@@ -259,7 +275,11 @@ int main(int argc, char** argv) {
          if (processID > 0) {
             childrenActive++;
             totalChildrenLaunched++;
-             
+ 
+	    //if (childrenActive >= 1) {
+	  //     systemClockIncrement = (double) oneQuarterSecond / childrenActive;
+        //    }
+
             if (addToProcessTable(processID) == -1) {
                printf("ERROR in oss.c: Process Control Block (PCB) table is full.\n");
 	       printf("Cannot add PID %d\n", processID);
@@ -283,6 +303,10 @@ int main(int argc, char** argv) {
 	 while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
 	    removeFromProcessTable(pid);
             childrenActive--;
+
+	    //if (childrenActive >= 1) {
+              // systemClockIncrement = (double) oneQuarterSecond / childrenActive;
+            //}
 	 }
       }
 
@@ -295,6 +319,10 @@ int main(int argc, char** argv) {
 	 while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
 	    removeFromProcessTable(pid);
             childrenActive--;
+
+	    //if (childrenActive >= 1) {
+             //  systemClockIncrement = (double) oneQuarterSecond / childrenActive;
+           // }
 	 }
       }
    }
@@ -347,8 +375,36 @@ void checkForSimulExceedsProcError(int simulProcesses, int totalProcesses) {
 
 
 // Adjust system time's seconds and nanoseconds.
-void incrementClock(int *seconds, long int *nanoseconds, int increment) {
+void incrementClock(int *seconds, long long int *nanoseconds, int activeChildrenCount) {
+   //if (activeChildrenCount <= 0) {
+     // return;
+  // }
+
+   long long int increment;
+   long long int remainder;
+
+   static long long int remainderValue = 0;
+  
+   if (activeChildrenCount > 0) {
+      increment = oneQuarterSecond / activeChildrenCount;
+      remainder = oneQuarterSecond % activeChildrenCount;
+      printf("increment = %lld, remainder = %lld, remainderValue = %lld\n\n", increment, remainder, remainderValue);
+   }
+
+   else {
+      increment = oneQuarterSecond;
+      remainder = 0;
+   }
+
    (*nanoseconds) += increment;
+   remainderValue += remainder;
+
+   if (activeChildrenCount > 0 && remainderValue >= activeChildrenCount) {
+      *nanoseconds += 1;
+
+      remainderValue -= activeChildrenCount;
+   }
+
 
    if (*nanoseconds > oneBillionNanoseconds) {
        *nanoseconds = 0;
@@ -385,10 +441,10 @@ long int randomizeChildNanoseconds(int childTimeLimitSecs, int randomSeconds) {
 // System seconds is implicitly dealt with in main().
 long long int determineNextLaunchNanoseconds (int intervalMS, long long int oldLaunchTime) {
     long long int nanoConversion = (long long int)intervalMS * 1000000;
-    long long int newLaunchTime = oldLaunchTime + nanoConversion;
+    long double newLaunchTime = (long double) oldLaunchTime + nanoConversion;
 
 
-    while (newLaunchTime >= oneBillionNanoseconds) {
+    while (newLaunchTime > oneBillionNanoseconds) {
        newLaunchTime -= oneBillionNanoseconds;
     }
 
@@ -426,7 +482,7 @@ void removeFromProcessTable(pid_t pid) {
    }
 }
 void printProcessTable() {
-   printf("\nOSS PID: %d  SysClockS: %d  SysClockNano: %ld\n", getpid(), systemClockSeconds, systemClockNano);
+   printf("\nOSS PID: %d  SysClockS: %d  SysClockNano: %lld\n", getpid(), systemClockSeconds, systemClockNano);
    printf("Process Table:\n");
    printf("Entry\t Occupied\t PID\t\t StartS\t StartN\n");
 
