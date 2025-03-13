@@ -92,7 +92,9 @@ int main(int argc, char** argv) {
    int simul = 1;
    int timeLimitForChildren = 1;
    int intervalInMSToLaunchChildren = 500;
-
+   
+   char logfile[105] = "logfile.txt";
+   char suffix[] = ".txt";
 
    // If user puts invalid values for opt arguments, one of these strings will be passed into 'checkForOptargError()'.
    // This will help state the option in which the error occurred while trying to execute './oss'.
@@ -100,9 +102,10 @@ int main(int argc, char** argv) {
    char simulName[] = "-s [simul]";
    char timeLimitName[] = "-t [timeLimitForChildren]";
    char intervalName[] = "-i [intervalInMSToLaunchChildren]";
+   char logfileName[] = "-f [logfile]";
 
 
-   while ((opt = getopt(argc, argv, "hn:s:t:i:")) != -1) {
+   while ((opt = getopt(argc, argv, "hn:s:t:i:f:")) != -1) {
       switch (opt) {
          case 'h':
             printHelpMessage();
@@ -137,6 +140,19 @@ int main(int argc, char** argv) {
 
 	    break;
 
+	 case 'f':
+	    char basename[100];
+
+	    strncpy(basename, optarg, sizeof(basename) - 1);
+	    basename[sizeof(basename) - 1] = '\0';
+
+	    strcat(basename, suffix);
+	    strcpy(logfile, basename);
+
+            printf("Logfile name: %s\n", logfile);
+
+	    break;
+
          default:
 	    printf("ERROR in oss.c: Arguments are invalid or you forgot to input a value for them.\n");
 	    printf("Please type './oss -h' for help.\n\n");
@@ -146,6 +162,13 @@ int main(int argc, char** argv) {
  	    break;
       }
    }
+
+
+    printf("Logfile name: %s\n", logfile);
+
+
+
+
 
    bool processesFinished = false;
    int childrenActive = 0;                                          // # of children running simultaneously (not to be confused with 'proc').
