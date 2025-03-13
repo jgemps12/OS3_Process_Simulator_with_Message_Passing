@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/msg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,17 +28,35 @@
 #define SHMKEY1 42069
 #define INT_BUFFER_SIZE sizeof(int)
 
+
 // Starting a memory segment for system clock nanoseconds.
 #define SHMKEY2 42070
 #define LONG_BUFFER_SIZE sizeof(long int)
 
 
-// Creates and attaches two shared memory identifiers.
-int secondsShmid = shmget(SHMKEY1, INT_BUFFER_SIZE, 0777 | IPC_CREAT);
-long int nanoShmid = shmget(SHMKEY2, LONG_BUFFER_SIZE, 0777 | IPC_CREAT);
+// Starting a memory segment for a log file.
+#define SHMKEY3 42071
+#define LOGFILE_BUFFER_SIZE 105
 
+
+// Permissions for memory queue.
+#define PERMISSIONS 0644
+
+
+// Initializes a log file to store message queue information.
+char logfile[105] = "logfile.txt";
+char suffix[] = ".txt";
+
+
+// Creates and attaches two shared memory identifiers (plus one for a log file).
+int secondsShmid = shmget(SHMKEY1, INT_BUFFER_SIZE, 0777 | IPC_CREAT);
 int *secondsShared = (int *)shmat(secondsShmid, 0, 0);
+
+long int nanoShmid = shmget(SHMKEY2, LONG_BUFFER_SIZE, 0777 | IPC_CREAT);
 long int *nanosecondsShared = (long int *)shmat(nanoShmid, 0, 0);
+
+int logfileShmid = shmget(SHMKEY3, LOGFILE_BUFFER_SIZE, 0777 | IPC_CREAT);
+char *logfileFP = (char *)shmat(logfileShmid, 0, 0);
 
 
 // A process table holds information about each child process.
@@ -50,10 +69,26 @@ struct PCB {
 struct PCB processTable[20];
 
 
+// Holds message queue information.
+typedef struct messageBuffer {
+   long int messageType;
+   char stringData[100];
+   int integerData;
+} messageBuffer;
+
+
+// Initializes information for message buffer.
+messageBuffer buffer;
+int messageQueueID;
+key_t key;
+
+
+
 // Places nanosecond values into variables for easier code readability.
 long int halfBillionNanoseconds = 500000000;
 long int oneBillionNanoseconds = 1000000000;
 long int oneQuarterSecond = 250000000;
+
 
 // Initialization of simulated system time. Increments every (250 / number of active processes) seconds.
 int systemClockSeconds = 0;
@@ -88,6 +123,7 @@ void periodicallyTerminateProgram(int);
 
 int main(int argc, char** argv) {  
    int opt;
+   strcpy(logfileFP, logfile);
 
    // If user does not input the arguments corresponding to variables below, assign default values.
    int proc = 1;
@@ -95,8 +131,8 @@ int main(int argc, char** argv) {
    int timeLimitForChildren = 1;
    int intervalInMSToLaunchChildren = 500;
    
-   char logfile[105] = "logfile.txt";
-   char suffix[] = ".txt";
+   // Copies the default log file name into shared memory.
+   strcpy(logfileFP, "logfile.txt");
 
    // If user puts invalid values for opt arguments, one of these strings will be passed into 'checkForOptargError()'.
    // This will help state the option in which the error occurred while trying to execute './oss'.
@@ -106,7 +142,7 @@ int main(int argc, char** argv) {
    char intervalName[] = "-i [intervalInMSToLaunchChildren]";
    char logfileName[] = "-f [logfile]";
 
-
+   
    while ((opt = getopt(argc, argv, "hn:s:t:i:f:")) != -1) {
       switch (opt) {
          case 'h':
@@ -145,13 +181,16 @@ int main(int argc, char** argv) {
 	 case 'f':
 	    char basename[100];
 
+	    // Gathers filename input.
 	    strncpy(basename, optarg, sizeof(basename) - 1);
 	    basename[sizeof(basename) - 1] = '\0';
 
+	    // Adds .txt suffix to user-inputted basename.
 	    strcat(basename, suffix);
-	    strcpy(logfile, basename);
+	    strcpy(logfile, basename);                    
 
-            printf("Logfile name: %s\n", logfile);
+	    // Copies user-inputted filename into shared memory.
+	    strcpy(logfileFP, logfile);
 
 	    break;
 
@@ -175,6 +214,34 @@ int main(int argc, char** argv) {
    // Initializes shared memory segments.
    *secondsShared = 0;
    *nanosecondsShared = 0;
+
+
+   // Creates .txt file to store message update information from oss.c (this file).
+   FILE *logOutputFP = fopen(logfile, "w");
+
+   if (logOutputFP == NULL) {
+      printf("ERROR in oss.c: cannot create a log file named '%s'", logfile);
+
+      exit(-1);
+   }
+
+
+   // Attempts to set up a message queue.
+   if ((key = ftok(logfile, 1)) == -1) {
+      printf("ERROR in oss.c: problem with ftok() function.\n");
+      printf("Cannot access a key for message queue initialization.\n\n");
+
+      exit(-1);
+   }
+
+   if ((messageQueueID = msgget(key, PERMISSIONS | IPC_CREAT)) == -1) {
+      printf("ERROR in oss.c: problem with msgget() function.\n");
+      printf("Cannot acquire a message queue ID for initialization.\n\n");
+
+      exit(-1);
+   }
+   printf("Message queue is now set up.\n\n");
+
 
    // Signal handler for terminating program after 60 real-life seconds.
    signal(SIGALRM, periodicallyTerminateProgram);
@@ -319,11 +386,21 @@ int main(int argc, char** argv) {
    }
    printProcessTable();
 
-  
+   // Detach from and clear shared memory.
    shmdt(secondsShared);
    shmdt(nanosecondsShared);
+   shmdt(logfileFP);
    shmctl(secondsShmid, IPC_RMID, NULL);
    shmctl(nanoShmid, IPC_RMID, NULL);
+   shmctl(logfileShmid, IPC_RMID, NULL);
+
+   // Remove the message queue.
+   if (msgctl(messageQueueID, IPC_RMID, NULL) == -1) {
+      printf("ERROR in oss.c: problem with msgctl() function.\n");
+      printf("Cannot delete or remove message queue.\n\n");
+
+      exit(-1);
+   }
 
 
    return EXIT_SUCCESS;
@@ -439,7 +516,6 @@ long int randomizeChildNanoseconds(int childTimeLimitSecs, int randomSeconds) {
 
 
 // Only deals with system nanoseconds to determine next launch time. 
-// System seconds is implicitly dealt with in main().
 long long int determineNextLaunchNanoseconds (int intervalMS, long long int currentNanoTime) {
     long long int nanoConversion = (long long int)intervalMS * 1000000;
     long double newLaunchTime = (long double) currentNanoTime + nanoConversion;
@@ -557,15 +633,30 @@ void periodicallyTerminateProgram(int signal) {
    printf("\nChild process termination complete.\n");
    printf("Now freeing shared memory...\n");
 
+  
+   // Detach from and clear shared memory.
    shmdt(secondsShared);
    shmdt(nanosecondsShared);
+   shmdt(logfileFP);
    shmctl(secondsShmid, IPC_RMID, NULL);
    shmctl(nanoShmid, IPC_RMID, NULL);
+   shmctl(logfileShmid, IPC_RMID, NULL);
 
    printf("\nShared memory detachment and deletion complete.\n");
+   printf("Now deleting the message queue...\n");
+
+   // Remove the message queue.
+   if (msgctl(messageQueueID, IPC_RMID, NULL) == -1) {
+      printf("ERROR in oss.c: problem with msgctl() function.\n");
+      printf("Cannot delete or remove message queue.\n\n");
+
+      exit(-1);
+   }
+
+   printf("\nMessage queue removal and deletion complete.\n");
    printf("Now exiting program...\n\n");
 
-   exit(-1);
+   exit(0);
 }
 
 
