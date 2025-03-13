@@ -456,20 +456,24 @@ void printHelpMessage() {
 
 
    printf("\n\nTo execute this program, type './oss', then type in any combination of options:\n\n\n");
-   printf("Option:                      What to enter after option:              Required (yes/no):        Description:\n");
-   printf("  -h                           nothing.                                 no                        Displays this help menu.\n");                            
-   printf("  -n [proc]                    an integer between 1 and 10.             no; defaults to 1.        Runs a total # of processes.\n");
-   printf("  -s [simul]                   an integer smaller than '-n [proc]'.     no; defaults to 1.        Runs a max # of processes simultaneously.\n");
-   printf("  -t [timeLimitForChildren]    an integer of at least 1.                no; defaults to 1.        Runs each process between 1 and\n");
-   printf("                                                                                                    [timeLimitForChildren] seconds.\n");
-   printf("  -i [intervalInMS             an integer of at least 1.                no; defaults to 500.      Runs a new process every [interval\n");
-   printf("       ToLaunchChildren]                                                                            inMSToLaunchChildren] milliseconds.\n\n\n");
+   printf("Option:                       What to enter after option:               Default values (if argu-      Description:\n");
+   printf("                                                                         ment is not entered):\n\n");
+   printf("  -h                           > nothing.                                 > (not applicable)           > Displays this help menu.\n"); 
+   printf("  -n [proc]                    > an integer between 1 and 10.             > defaults to 1.             > Runs a total # of processes.\n");
+   printf("  -s [simul]                   > an integer smaller than '-n [proc]'.     > defaults to 1.             > Runs a max # of processes simultaneously.\n");
+   printf("  -t [timeLimitForChildren]    > an integer of at least 1.                > defaults to 1.             > Runs each process between 1 and\n");
+   printf("                                                                                                          [timeLimitForChildren] seconds.\n");
+   printf("  -i [intervalInMS             > an integer between 1 and 1000.           > defaults to 500.           > Runs a new process every [interval\n");
+   printf("       ToLaunchChildren]                                                                                  inMSToLaunchChildren] milliseconds.\n");
+   printf("  -f [logfile]                 > a file's basename.                       > defaults to 'logfile'      > Stores output relating to parent and\n");
+   printf("                                                                                                          child processes.\n\n\n"); 
 
-   printf("For example, typing './oss -n 6 -s 4 -t 5 -i 600' will run:\n");
+   printf("For example, typing './oss -n 6 -s 4 -t 5 -i 600 -f storage' will run:\n");
    printf("\t1.) a total of 6 processes.\n");
    printf("\t2.) a maximum of 4 processes simultaneously.\n");
    printf("\t3.) each process for a duration between 1 and 5 seconds. Duration is randomly selected.\n");
-   printf("\t4.) a new process every 600 milliseconds.\n\n\n");
+   printf("\t4.) a new process every 600 milliseconds.\n");
+   printf("\t5.) while storing message statuses inside a file called 'storage.txt'.\n\n\n");
 
    exit(0);
 }
