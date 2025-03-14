@@ -155,36 +155,90 @@ int main(int argc, char** argv) {
 
 
    // Receives a message from the parent.
-   if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
+   /*if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
       printf("ERROR in worker.c: Problem with msgrcv() function.\n");
       printf("Cannot receive message from worker.c.\n\n");
 
       exit(-1);
    }
    printf("CHILD %d\n\tReceived: %s\n\tInteger Data (0/1): %d\n", getpid(), receiveBuffer.stringData, receiveBuffer.integerData);
-
+*/
 
    // Output the PID, PPID, and time information every system time second.
    printf("WORKER PID: %d   PPID: %d  SysClockS: %d  SysClockNano: %ld  TermTimeS: %d  TermTimeNano: %ld ---Just starting\n", getpid(), getppid(), systemClockSeconds, systemClockNano, childTerminationTimeSeconds, childTerminationTimeNano);
 
 
    // Do not iteratively print statement in loop until a whole second passes.
-   int i;
-   for (i = 0; i < childProcessTimeSeconds; i++) { 
-      while(1) {
+   long int iterations = 0;
+   do {
+      // Receives a message from the parent.
+      if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
+         printf("ERROR in worker.c: Problem with msgrcv() function.\n");
+         printf("Cannot receive message from worker.c.\n\n");
 
-	 // Compare # of seconds before and after shared memory is re-read.
-         int secondsBeforeMemRead = systemClockSeconds;                                              // Before read.
-         systemClockSeconds = *sharedSeconds;                                                        // During read.
-         int secondsAfterMemRead = systemClockSeconds;                                               // After read.
+         exit(-1);
+      }
+      printf("CHILD %d\n\tReceived: %s\n\tInteger Data (0/1): %d\n", getpid(), receiveBuffer.stringData, receiveBuffer.integerData);
 
-         int secondsRan = getElapsedTimeSeconds(initialSystemClockSecs, systemClockSeconds);
+   
+      // Compare # of seconds before and after shared memory is re-read.
+      int secondsBeforeMemRead = systemClockSeconds;                                              // Before read.
+      systemClockSeconds = *sharedSeconds;                                                        // During read.
+      int secondsAfterMemRead = systemClockSeconds;                                               // After read.
+
+      int secondsRan = getElapsedTimeSeconds(initialSystemClockSecs, systemClockSeconds);
  
+
 //         printf("systemClockSeconds: %d\t systemClockNano: %ld\nFrom worker.c\n", systemClockSeconds, systemClockNano);
 
          // Ensures that # of nanoseconds is similar to the last second as to the current second.
 	 // That way, the statement below will wait one COMPLETE second before printing again.
-         if (secondsBeforeMemRead != secondsAfterMemRead) {
+
+      if (systemClockSeconds >= childTerminationTimeSeconds && 
+            (systemClockSeconds > childTerminationTimeSeconds || systemClockNano >= childTerminationTimeNano)) {
+
+
+	 // Sends a message to the parent that child is about to terminate.
+	 sendBuffer.messageType = getppid();
+         sendBuffer.integerData = 0;
+
+         snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to parent. Child is now terminating.");
+
+         if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
+            printf("ERROR in worker.c: Problem with msgsnd() function.\n");
+            printf("Cannot send message to oss.c.\n\n");
+
+            exit(-1);
+         }
+
+         printf("WORKER PID: %d   PPID: %d  SysClockS: %d  SysClockNano: %ld  TermTimeS: %d  TermTimeNano: %ld ---Terminating\n", getpid(), getppid(), systemClockSeconds, systemClockNano, childTerminationTimeSeconds, childTerminationTimeNano);
+ 
+	 break;
+      }
+
+      else {
+         // Sends a message to the parent that child is still running.
+         sendBuffer.messageType = getppid();
+         sendBuffer.integerData = 1;
+
+         snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to parent. Child is still running.");
+
+         if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
+            printf("ERROR in worker.c: Problem with msgsnd() function.\n");
+            printf("Cannot send message to oss.c.\n\n");
+
+            exit(-1);
+         }
+
+	 iterations++;
+         printf("WORKER PID: %d   PPID: %d  SysClockS: %d  SysClockNano: %ld  TermTimeS: %d  TermTimeNano: %ld ---%ld iteration(s) have passed since starting\n", getpid(), getppid(), systemClockSeconds, systemClockNano, childTerminationTimeSeconds, childTerminationTimeNano, iterations);
+         
+         }
+      }
+      while (1);
+  /*
+
+	 if (secondsBeforeMemRead != secondsAfterMemRead) {
 
             long int nanosecondsBeforeMemRead = systemClockNano;
             systemClockNano = *sharedNanoseconds;
@@ -195,6 +249,19 @@ int main(int argc, char** argv) {
                systemClockNano = *sharedNanoseconds;
                nanosecondsAfterMemRead = systemClockNano;
             }
+
+	    sendBuffer.messageType = getppid();
+            sendBuffer.integerData = 1;
+
+            snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to parent. Child is now terminating.");
+
+            if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
+               printf("ERROR in worker.c: Problem with msgsnd() function.\n");
+               printf("Cannot send message to oss.c.\n\n");
+
+               exit(-1);
+            }
+
 
             printf("WORKER PID: %d   PPID: %d  SysClockS: %d  SysClockNano: %ld  TermTimeS: %d  TermTimeNano: %ld ---%d seconds have passed since starting\n", getpid(), getppid(), systemClockSeconds, systemClockNano, childTerminationTimeSeconds, childTerminationTimeNano, secondsRan);
 
@@ -212,13 +279,24 @@ int main(int argc, char** argv) {
 
       if (systemClockNano >= childTerminationTimeNano) {
          printf("WORKER PID: %d   PPID: %d  SysClockS: %d  SysClockNano: %ld  TermTimeS: %d  TermTimeNano: %ld ---Terminating\n", getpid(), getppid(), systemClockSeconds, systemClockNano, childTerminationTimeSeconds, childTerminationTimeNano);
-       
-	 
+      
+	 sendBuffer.messageType = getppid();
+	 sendBuffer.integerData = 0;
+	
+	 snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to parent. Child is now terminating.");
+
+         if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
+            printf("ERROR in worker.c: Problem with msgsnd() function.\n");
+            printf("Cannot send message to oss.c.\n\n");
+
+            exit(-1);
+         }
+ 
 	 break;
       }
    }
 
-
+*/
    // Detach shared memory.
    shmdt(sharedSeconds);
    shmdt(sharedNanoseconds);
