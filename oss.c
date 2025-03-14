@@ -78,10 +78,10 @@ typedef struct messageBuffer {
 
 
 // Initializes information for message buffer.
-messageBuffer buffer;
+messageBuffer sendBuffer;
+messageBuffer receiveBuffer;
 int messageQueueID;
 key_t key;
-
 
 
 // Places nanosecond values into variables for easier code readability.
@@ -103,6 +103,12 @@ long long int currentLaunchTimeNano = systemClockIncrement;
 long long int nextLaunchTimeNano = systemClockIncrement;
 int currentLaunchTimeSeconds = 0;
 int nextLaunchTimeSeconds = 0;
+
+
+
+int numberOfProcesses = 0;
+int currentProcess = 0;
+int processesCompleted = 0;
 
 
 // Function prototypes.
@@ -341,14 +347,48 @@ int main(int argc, char** argv) {
 
 
          // Work with parent process. Increment the current # of total children and those running simultaneously.
-         if (processID > 0) {
+         // Meanwhile, send a message to a running child process.
+	 if (processID > 0) {
             childrenActive++;
             totalChildrenLaunched++;
+/*
+	    // Information that will be sent to the child through a message.
+	    sendBuffer.messageType = processTable[currentProcess].processID;
+	    sendBuffer.integerData = processTable[currentProcess].occupied;
+	    printf("sendBuffer.messageType: %ld\n", sendBuffer.messageType);
+	    printf("sendBuffer.integerData: %d\n\n", sendBuffer.integerData);
 
+	  
+	    snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to child %d", currentProcess);
+ 
+            if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
+	       printf("ERROR in oss.c: Problem with msgsnd() function.\n");
+	       printf("Cannot send message to worker.c.\n\n");
+
+	       exit(-1);
+            }
+*/
             if (addToProcessTable(processID) == -1) {
                printf("ERROR in oss.c: Process Control Block (PCB) table is full.\n");
 	       printf("Cannot add PID %d\n", processID);
 	    }
+
+	    // Information that will be sent to the child through a message.
+            sendBuffer.messageType = processTable[currentProcess].processID;
+            sendBuffer.integerData = processTable[currentProcess].occupied;
+            printf("sendBuffer.messageType: %ld\n", sendBuffer.messageType);
+            printf("sendBuffer.integerData: %d\n\n", sendBuffer.integerData);
+
+
+            snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to child %d. Child is running.", currentProcess);
+
+            if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
+               printf("ERROR in oss.c: Problem with msgsnd() function.\n");
+               printf("Cannot send message to worker.c.\n\n");
+
+               exit(-1);
+            }
+
 	 }
       }
     
@@ -366,6 +406,15 @@ int main(int argc, char** argv) {
 
 
 	 while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+	    if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
+	       printf("ERROR in oss.c: Problem with msgrcv() function.\n");
+	       printf("Cannot receive message from worker.c.\n\n");
+	       
+	       exit(-1);
+            }
+	    printf("PARENT %d\n\tReceived: %s\n\tInteger Data (0/1): %d\n", getpid(), receiveBuffer.stringData, receiveBuffer.integerData);
+
+	     
 	    removeFromProcessTable(pid);
             childrenActive--;
             nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
