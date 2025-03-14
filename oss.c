@@ -228,7 +228,7 @@ int main(int argc, char** argv) {
 
    // Creates .txt file to store message update information from oss.c (this file).
    FILE *logOutputFP = fopen(logfile, "w");
-
+   
    if (logOutputFP == NULL) {
       printf("ERROR in oss.c: cannot create a log file named '%s'", logfile);
 
@@ -294,30 +294,12 @@ int main(int argc, char** argv) {
 	   if (systemClockNano == halfBillionNanoseconds || systemClockNano == 0) {
               printProcessTable();
            }
-	   systemClockIncrement = incrementClock(&systemClockSeconds, &systemClockNano, childrenActive);
-   
-	  
-	  
-  //       printf("childrenActive: %d \t systemClockSeconds: %d\t systemNanoOnly: %lld\n", childrenActive, systemClockSeconds, systemNanoOnly);
-  //         printf("\tnextLaunchTimeNano: %lld systemClockIncrement: %ld \t oneQuarterSecond: %ld\n\n", nextLaunchTimeNano,  systemClockIncrement, oneQuarterSecond);
-
-
-
-           long int difference = systemNanoOnly - nextLaunchTimeNano;
- 	   printf("Difference: %ld, oneQuarterSecond: %ld\n\n", difference, oneQuarterSecond);
- 
- 
-
-
-	   //printf("systemNanoOnly: %lld\n\n", systemNanoOnly);
-	   
+	   systemClockIncrement = incrementClock(&systemClockSeconds, &systemClockNano, childrenActive); 
 	   
 
            // Launches a child based on [intervalInMSToLaunchChildren].
 	   if ((systemNanoOnly - nextLaunchTimeNano >= (long double) oneQuarterSecond) ||
-               (systemNanoOnly - nextLaunchTimeNano >= 0)) { 
-//         	  printf("LAUNCHEDDDDDDDDD\n\n\n");
- 
+               (systemNanoOnly - nextLaunchTimeNano >= 0)) {  
 	          processID = fork();
               
 		  nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
@@ -384,9 +366,7 @@ int main(int argc, char** argv) {
 	       // Information that will be sent to the child through a message.
                sendBuffer.messageType = processTable[currentProcess].processID;
                sendBuffer.integerData = processTable[currentProcess].occupied;
-               printf("sendBuffer.messageType: %ld\n", sendBuffer.messageType);
-               printf("sendBuffer.integerData: %d\n\n", sendBuffer.integerData);
-
+      
 
                snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to child %d. Child is running.", currentProcess);
 
@@ -396,6 +376,11 @@ int main(int argc, char** argv) {
 
                   exit(-1);
                }
+               printf("OSS: Sending message to worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
+               
+	       fprintf(logOutputFP, "OSS: Sending message to worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
+               fflush(logOutputFP);
+	       
 
 	       if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
                   printf("ERROR in oss.c: Problem with msgrcv() function.\n");
@@ -403,7 +388,13 @@ int main(int argc, char** argv) {
 
                   exit(-1);
                }
-               printf("PARENT %d\n\tReceived: %s\n\tInteger Data (0/1): %d\n", getpid(), receiveBuffer.stringData, receiveBuffer.integerData);
+	       printf("OSS: Receiving message from worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
+	       fprintf(logOutputFP, "OSS: Receiving message from worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
+               fflush(logOutputFP);
+
+
+               printf("Received: '%s'\tParent %d\tInteger Data (0/1): %d\n", receiveBuffer.stringData, getpid(), receiveBuffer.integerData);
+	      
 	    }
          }
       }
@@ -428,7 +419,11 @@ int main(int argc, char** argv) {
 	       
 	       exit(-1);
             }
-	    printf("PARENT %d\n\tReceived: %s\n\tInteger Data (0/1): %d\n", getpid(), receiveBuffer.stringData, receiveBuffer.integerData);
+	    printf("OSS: Worker %d PID %d is planning to terminate.\n", nextChild, getpid());
+	    fprintf(logOutputFP, "OSS: Worker %d PID %d is planning to terminate.\n", nextChild, getpid());
+            fflush(logOutputFP);
+
+	    printf("Received: '%s'\tParent %d\tInteger Data (0/1): %d\n", receiveBuffer.stringData, getpid(), receiveBuffer.integerData);
 
 	     
 	    removeFromProcessTable(pid);
@@ -450,6 +445,10 @@ int main(int argc, char** argv) {
       }
    }
    printProcessTable();
+
+
+   fclose(logOutputFP);
+
 
    // Detach from and clear shared memory.
    shmdt(secondsShared);
