@@ -47,7 +47,8 @@ typedef struct messageBuffer {
 
 
 // Initializes information for message buffer.
-messageBuffer buffer;
+messageBuffer receiveBuffer;
+messageBuffer sendBuffer;
 int messageQueueID;
 key_t key;
 
@@ -108,10 +109,6 @@ int main(int argc, char** argv) {
    int initialSystemClockSecs = *sharedSeconds;
    long int initialSystemClockNano = *sharedNanoseconds;        
  
-   printf("logfile in worker.c: %s", logfileFP);
-
-
-
 
    // Attempts to set up a message queue.
    if ((key = ftok(logfileFP, 1)) == -1) {
@@ -151,9 +148,20 @@ int main(int argc, char** argv) {
       childProcessTimeNano = atoi(argv[2]);
    }
 
+
    // Determines the system time that the child process should terminate.
    childTerminationTimeSeconds = getTerminationTimeSeconds(childProcessTimeSeconds, initialSystemClockSecs);
    childTerminationTimeNano = getTerminationTimeNano(childProcessTimeNano, initialSystemClockNano, &childTerminationTimeSeconds);
+
+
+   // Receives a message from the parent.
+   if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
+      printf("ERROR in worker.c: Problem with msgrcv() function.\n");
+      printf("Cannot receive message from worker.c.\n\n");
+
+      exit(-1);
+   }
+   printf("CHILD %d\n\tReceived: %s\n\tInteger Data (0/1): %d\n", getpid(), receiveBuffer.stringData, receiveBuffer.integerData);
 
 
    // Output the PID, PPID, and time information every system time second.
