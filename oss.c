@@ -105,12 +105,9 @@ long long int nextLaunchTimeNano = systemClockIncrement;
 int currentLaunchTimeSeconds = 0;
 int nextLaunchTimeSeconds = 0;
 
-
-
-int numberOfProcesses = 0;
-int currentProcess = 0;
-int processesCompleted = 0;
+// For determining the child process order in which messages are to be sent.
 int currentChildIndex = 0;
+
 
 // Function prototypes.
 void checkForOptargEntryError(int, char []);
@@ -120,7 +117,6 @@ long long int convertSystemTimeToNanosecondsOnly (int *, long long int *);
 int randomizeChildSecondsLimit(int);
 long int randomizeChildNanoseconds(int, int);
 long long int determineNextLaunchNanoseconds(int, long long int);
-int calculateNextChildToSendAMessageTo(int); 
 int addToProcessTable(pid_t);
 void removeFromProcessTable(pid_t);
 void printProcessTable();
@@ -216,11 +212,11 @@ int main(int argc, char** argv) {
 
 
    bool processesFinished = false;
-   bool processesRunning = true;
    int childrenActive = 0;                                          // # of children running simultaneously (not to be confused with 'proc').
-   int totalChildrenLaunched = 0;                                   // # of children launched so far (not to be confused with 'simul').
-    
+   int totalChildrenLaunched = 0;                                   // # of children launched so far (not to be confused with 'simul').  
    int nextChild = 0;
+  
+
    // Initializes shared memory segments.
    *secondsShared = 0;
    *nanosecondsShared = 0;
@@ -258,11 +254,8 @@ int main(int argc, char** argv) {
    alarm(60);
 
 
-   while (processesFinished == false || processesRunning == true) {
+   while (processesFinished == false) {
       systemClockIncrement = incrementClock(&systemClockSeconds, &systemClockNano, childrenActive);
-    
-      //printf("childrenActive: %d \t systemClockSeconds: %d\t systemClockNano: %Lf\n", childrenActive, systemClockSeconds, systemClockNano);
-           //printf("\tnextLaunchTimeNano: %Lf  systemClockIncrement: %Lf \t oneQuarterSecond: %Lf\n\n", nextLaunchTimeNano, systemClockIncrement, (long double) oneQuarterSecond);
 
 
       // System time in shared memory constantly updates in loop.
@@ -272,7 +265,7 @@ int main(int argc, char** argv) {
 
       // Process table prints every half second.
       if (systemClockNano == halfBillionNanoseconds || systemClockNano == 0) {
-         printProcessTable();
+        // printProcessTable();
       }
      
 
@@ -281,17 +274,12 @@ int main(int argc, char** argv) {
          pid_t processID;
 
 
-         // Spinlocks ('while' and 'for' loops) prevent multiple Process Tables from printing out in short time bursts.
+         // Spinlock ('while' loop) prevent multiple Process Tables from printing out in short time bursts.
          while (systemNanoOnly - nextLaunchTimeNano != (long double) oneQuarterSecond) {
-	 //while (systemNanoOnly - nextLaunchTimeNano != 0 &&) {  
-
 	   int i;
-	   for (i = 0; i < 5000; i++) {
- 	      // Do nothing.
-	   }   
-
-
+          
 	   if (systemClockNano == halfBillionNanoseconds || systemClockNano == 0) {
+              printf("printProcessTable() CALL 1");
               printProcessTable();
            }
 	   systemClockIncrement = incrementClock(&systemClockSeconds, &systemClockNano, childrenActive); 
@@ -299,11 +287,12 @@ int main(int argc, char** argv) {
 
            // Launches a child based on [intervalInMSToLaunchChildren].
 	   if ((systemNanoOnly - nextLaunchTimeNano >= (long double) oneQuarterSecond) ||
-               (systemNanoOnly - nextLaunchTimeNano >= 0)) {  
-	          processID = fork();
+               (systemNanoOnly - nextLaunchTimeNano >= 0)) { 
+	     
+	       processID = fork();
               
-		  nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
-		  break;
+	       nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
+	       break;
 	    }   
          }
 
@@ -337,111 +326,118 @@ int main(int argc, char** argv) {
 	 if (processID > 0) {
             childrenActive++;
             totalChildrenLaunched++;
-/*
-	    // Information that will be sent to the child through a message.
-	    sendBuffer.messageType = processTable[currentProcess].processID;
-	    sendBuffer.integerData = processTable[currentProcess].occupied;
-	    printf("sendBuffer.messageType: %ld\n", sendBuffer.messageType);
-	    printf("sendBuffer.integerData: %d\n\n", sendBuffer.integerData);
 
-	  
-	    snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to child %d", currentProcess);
- 
-            if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
-	       printf("ERROR in oss.c: Problem with msgsnd() function.\n");
-	       printf("Cannot send message to worker.c.\n\n");
-
-	       exit(-1);
-            }
-*/
             if (addToProcessTable(processID) == -1) {
                printf("ERROR in oss.c: Process Control Block (PCB) table is full.\n");
 	       printf("Cannot add PID %d\n", processID);
 	    }
-
-
-	    nextChild = calculateNextChildToSendAMessageTo(childrenActive);
-
-	    if (nextChild >= 0) {
-	       // Information that will be sent to the child through a message.
-               sendBuffer.messageType = processTable[currentProcess].processID;
-               sendBuffer.integerData = processTable[currentProcess].occupied;
-      
-
-               snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to child %d. Child is running.", currentProcess);
-
-	       if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
-                  printf("ERROR in oss.c: Problem with msgsnd() function.\n");
-                  printf("Cannot send message to worker.c.\n\n");
-
-                  exit(-1);
-               }
-               printf("OSS: Sending message to worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
-               
-	       fprintf(logOutputFP, "OSS: Sending message to worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
-               fflush(logOutputFP);
-	       
-
-	       if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
-                  printf("ERROR in oss.c: Problem with msgrcv() function.\n");
-                  printf("Cannot receive message from worker.c.\n\n");
-
-                  exit(-1);
-               }
-	       printf("OSS: Receiving message from worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
-	       fprintf(logOutputFP, "OSS: Receiving message from worker %d PID %d at time %d:%lld\n", nextChild, getpid(), systemClockSeconds, systemClockNano);
-               fflush(logOutputFP);
-
-
-               printf("Received: '%s'\tParent %d\tInteger Data (0/1): %d\n", receiveBuffer.stringData, getpid(), receiveBuffer.integerData);
-	      
-	    }
          }
       }
-    
-    
-      // If no more children are running and the maximum # of total children have been launched, end loop/program.
-      if (childrenActive == 0 && totalChildrenLaunched == proc) {
-	 processesFinished = true;
-      }
 
 
-      // If the limit of simultaneous children has been reached, but more still need to be launched, wait for them to terminate.
-      if (childrenActive == simul && totalChildrenLaunched < proc) {
-         int status;
-	 pid_t pid;
+      // For-loop acts as a Round Robin scheduling mechanism to determine which child should receive the next message from the parent.
+      for (nextChild = 0; nextChild < totalChildrenLaunched; nextChild++) {	 
+	 // Update system clock while in for-loop.
+         if ((systemClockNano == halfBillionNanoseconds || systemClockNano == 0)  && (nextChild == 0)) {
+
+             printf("printProcessTable() CALL 2");
+
+            printProcessTable();
+         }
+         
+
+         if (processTable[nextChild].occupied == 1) {	    
+	    // A buffer stores information about what will be sent to a child.
+            sendBuffer.messageType = processTable[nextChild].processID;
+            sendBuffer.integerData = processTable[nextChild].occupied;
+            snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to child %d again. Child is still running.", nextChild);
 
 
-	 while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-	    if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
-	       printf("ERROR in oss.c: Problem with msgrcv() function.\n");
-	       printf("Cannot receive message from worker.c.\n\n");
-	       
-	       exit(-1);
+	    // Parent process sends a message to a child process. Output printed to a logfile.
+            if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
+               printf("ERROR in oss.c: Problem with msgsnd() function.\n");
+               printf("Cannot send message to worker.c.\n\n");
+
+               exit(-1);
             }
-	    printf("OSS: Worker %d PID %d is planning to terminate.\n", nextChild, getpid());
-	    fprintf(logOutputFP, "OSS: Worker %d PID %d is planning to terminate.\n", nextChild, getpid());
+
+            printf("OSS: Sending message to Worker #%d PID %ld at time %d:%lld\n", nextChild, sendBuffer.messageType, systemClockSeconds, systemClockNano);
+            fprintf(logOutputFP, "OSS: Sending message to Worker #%d PID %ld at time %d:%lld\n", nextChild, sendBuffer.messageType, systemClockSeconds, systemClockNano);
+            fflush(logOutputFP);
+   
+
+	    // Slow down program to prevent race conditions between times in Process Table and those analyzed in worker.c.
+	    int i; 
+            for (i = 0; i < 10000000; i++) {
+               // Do nothing.
+            }
+
+
+            // Another buffer stores info about what the parent receives from a child.
+            receiveBuffer.messageType = processTable[nextChild].processID;
+            receiveBuffer.integerData = processTable[nextChild].occupied;
+
+ 		  
+	    // Parent process receives a message from a child process. Output printed to a logfile.
+	    if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), processTable[nextChild].processID, 0) == -1) {
+               printf("ERROR in oss.c: Problem with msgrcv() function.\n");
+               printf("Cannot receive message from worker.c.\n\n");
+
+               exit(-1);
+	    } 
+	    printf("OSS: Receiving message from Worker #%d PID %ld at time %d:%lld\n", nextChild, receiveBuffer.messageType, systemClockSeconds, systemClockNano);
+	    fprintf(logOutputFP, "OSS: Receiving message from Worker #%d PID %ld at time %d:%lld\n", nextChild, receiveBuffer.messageType, systemClockSeconds, systemClockNano);
             fflush(logOutputFP);
 
-	    printf("Received: '%s'\tParent %d\tInteger Data (0/1): %d\n", receiveBuffer.stringData, getpid(), receiveBuffer.integerData);
 
-	     
-	    removeFromProcessTable(pid);
-            childrenActive--;
-            nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
-	 }
-      }
+	    // If a child process will end, output in console and logfile that it will do so.
+	    if (receiveBuffer.integerData == 0) {
+	       removeFromProcessTable(receiveBuffer.messageType);
+               //childrenActive--;
+                // nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
+
+	       printf("**OSS: Worker #%d PID %ld is planning to terminate.**\n\n", nextChild, receiveBuffer.messageType);
+	       fprintf(logOutputFP, "**OSS: Worker #%d PID %ld is planning to terminate.**\n\n", nextChild, receiveBuffer.messageType);
+               fflush(logOutputFP);
+            }
 
 
-      // If all available children have launched, but not all of them finished, wait for them to terminate.
-      if (childrenActive > 0 && totalChildrenLaunched == proc) {
-         int status;
-	 pid_t pid;
+	    if ((systemNanoOnly - nextLaunchTimeNano >= (long double) oneQuarterSecond) ||
+               (systemNanoOnly - nextLaunchTimeNano >= 0)) {
+               break;
+            }	 
+	 } 
+	 
+	 // If no more children are running and the maximum # of total children have been launched, end loop/program.
+            if (childrenActive == 0 && totalChildrenLaunched == proc) {
+               processesFinished = true;
 
-	 while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-	    removeFromProcessTable(pid);
-            childrenActive--;
-	 }
+               break;
+
+            }
+
+	 // If the limit of simultaneous children has been reached, but more still need to be launched, wait for them to terminate.
+         if (childrenActive == simul && totalChildrenLaunched < proc) {
+            int status;
+            pid_t pid;
+
+            while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+               removeFromProcessTable(pid);
+               childrenActive--;
+               nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
+            }
+         }
+
+         // If all available children have launched, but not all of them finished, wait for them to terminate.
+         if (childrenActive > 0 && totalChildrenLaunched == proc) {
+            int status;
+            pid_t pid;
+
+            while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+               removeFromProcessTable(pid);
+               childrenActive--;
+            }
+         }
       }
    }
    printProcessTable();
@@ -533,7 +529,7 @@ long long int incrementClock(int *seconds, long long int *nanoseconds, int activ
    }
 
 
-   if (*nanoseconds > oneBillionNanoseconds) {
+   if (*nanoseconds >= oneBillionNanoseconds) {
        *nanoseconds = 0;
        (*seconds)++;
    }
@@ -587,21 +583,6 @@ long long int determineNextLaunchNanoseconds (int intervalMS, long long int curr
     return newLaunchTime;
 }
 
-
-// Uses a Round Robin scheduling mechanism to determine which child should receive the next message from the parent. 
-int calculateNextChildToSendAMessageTo(int childrenActive) {
-   if (childrenActive > 0) {
-      int childToSendMessage = currentChildIndex;
-
-      currentChildIndex = (currentChildIndex + 1) % childrenActive;
-
-      return childToSendMessage;
-   }
-   else {
-      return -1;
-   }
-}
-      
       
 // These three function manage and print entries in the PCB table.
 int addToProcessTable(pid_t pid) {
@@ -647,14 +628,15 @@ void printProcessTable() {
    int i;
 
    for (i = 0; i < 20; i++) {
-      if (processTable[i].occupied == 1) {
-         if ( processTable[i].startNanoseconds >= 1000000) {
-            printf("%d\t %d\t\t %d\t %d\t %ld\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-	 }	 
-         else {
-	    printf("%d\t %d\t\t %d\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
+      // If column 5 (startNanoseconds) has a large number, reduce tabbing.
+      if (processTable[i].occupied == 1 && processTable[i].startNanoseconds >= 1000000) {
+            printf("%d\t %d\t\t %d\t\t %d\t %ld\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
+	 }	
+	 
+        /* else {
+	    printf("%d\t %d\t\t %d\t\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
          } 
-      }
+      }*/
       else {
          printf("%d\t %d\t\t %d\t\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
       }
@@ -744,5 +726,6 @@ void periodicallyTerminateProgram(int signal) {
 
    exit(0);
 }
+
 
 
