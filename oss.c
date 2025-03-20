@@ -1,5 +1,5 @@
 /* Jesse Gempel
- * 2/27/2025
+ * 3/18/2025
  * Professor Mark Hauschild
  * CMP SCI 4760-001
 */
@@ -7,7 +7,7 @@
 
 // The oss.c file works with PARENT processes.
 // It launches a specific number of user processes with user input gathered from the 'getopt()' switch statement. 
-// This time, process launches will depend on a simulated system clock.
+// This time, process launches will depend on a simulated system clock as well as a memory queue.
 
 
 #include <unistd.h>
@@ -263,23 +263,16 @@ int main(int argc, char** argv) {
       *nanosecondsShared = systemClockNano;
 
 
-      // Process table prints every half second.
-      if (systemClockNano == halfBillionNanoseconds || systemClockNano == 0) {
-        // printProcessTable();
-      }
-     
-
       // If children are still available to launch simultaneously.
       if (childrenActive < simul && totalChildrenLaunched < proc) {
          pid_t processID;
 
 
-         // Spinlock ('while' loop) prevent multiple Process Tables from printing out in short time bursts.
+         // Spinlock ('while' loop) prevents multiple Process Tables from printing out in short time bursts.
          while (systemNanoOnly - nextLaunchTimeNano != (long double) oneQuarterSecond) {
 	   int i;
           
 	   if (systemClockNano == halfBillionNanoseconds || systemClockNano == 0) {
-              printf("printProcessTable() CALL 1");
               printProcessTable();
            }
 	   systemClockIncrement = incrementClock(&systemClockSeconds, &systemClockNano, childrenActive); 
@@ -337,11 +330,10 @@ int main(int argc, char** argv) {
 
       // For-loop acts as a Round Robin scheduling mechanism to determine which child should receive the next message from the parent.
       for (nextChild = 0; nextChild < totalChildrenLaunched; nextChild++) {	 
-	 // Update system clock while in for-loop.
+	 
+	      
+	 // Print process table for every half second of simulated system time.
          if ((systemClockNano == halfBillionNanoseconds || systemClockNano == 0)  && (nextChild == 0)) {
-
-             printf("printProcessTable() CALL 2");
-
             printProcessTable();
          }
          
@@ -367,8 +359,9 @@ int main(int argc, char** argv) {
    
 
 	    // Slow down program to prevent race conditions between times in Process Table and those analyzed in worker.c.
+	    // Also prevents multiple empty Process Tables from printing towards the program's end.
 	    int i; 
-            for (i = 0; i < 10000000; i++) {
+            for (i = 0; i < 20000000; i++) {
                // Do nothing.
             }
 
@@ -388,6 +381,8 @@ int main(int argc, char** argv) {
 	    printf("OSS: Receiving message from Worker #%d PID %ld at time %d:%lld\n", nextChild, receiveBuffer.messageType, systemClockSeconds, systemClockNano);
 	    fprintf(logOutputFP, "OSS: Receiving message from Worker #%d PID %ld at time %d:%lld\n", nextChild, receiveBuffer.messageType, systemClockSeconds, systemClockNano);
             fflush(logOutputFP);
+
+	    processTable[nextChild].messagesSent++;
 
 
 	    // If a child process will end, output in console and logfile that it will do so.
@@ -409,12 +404,11 @@ int main(int argc, char** argv) {
 	 } 
 	 
 	 // If no more children are running and the maximum # of total children have been launched, end loop/program.
-            if (childrenActive == 0 && totalChildrenLaunched == proc) {
-               processesFinished = true;
+         if (childrenActive == 0 && totalChildrenLaunched == proc) {
+            processesFinished = true;
 
-               break;
-
-            }
+            break;
+         }
 
 	 // If the limit of simultaneous children has been reached, but more still need to be launched, wait for them to terminate.
          if (childrenActive == simul && totalChildrenLaunched < proc) {
@@ -427,6 +421,7 @@ int main(int argc, char** argv) {
                nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
             }
          }
+
 
          // If all available children have launched, but not all of them finished, wait for them to terminate.
          if (childrenActive > 0 && totalChildrenLaunched == proc) {
@@ -528,7 +523,6 @@ long long int incrementClock(int *seconds, long long int *nanoseconds, int activ
       remainderValue -= activeChildrenCount;
    }
 
-
    if (*nanoseconds >= oneBillionNanoseconds) {
        *nanoseconds = 0;
        (*seconds)++;
@@ -593,7 +587,7 @@ int addToProcessTable(pid_t pid) {
          processTable[i].processID = pid;
          processTable[i].startSeconds = systemClockSeconds;
          processTable[i].startNanoseconds = systemClockNano;
-	 processTable[i].messagesSent = 1;
+	 processTable[i].messagesSent = 0;
 
 	 if (systemClockNano == oneBillionNanoseconds) {
             processTable[i].startSeconds++;
