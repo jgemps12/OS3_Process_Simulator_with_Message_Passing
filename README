@@ -1,11 +1,11 @@
-/* Jesse Gempel - Project 2
-   2/27/2024
+/* Jesse Gempel - Project 3
+   3/18/2024
    CMP SCI 4760-001
    Professor Mark Hauschild
 */
 
 1.) No issues were present in the completion and submission of this project. 
-    However, process table printout times can be mildly inconsistent at times.
+    However, process table printout times do not quite simulate real time.
 
 2.) To run the project, type "./oss" followed by any combination of these arguments (all of which are optional):
     a.) -h
@@ -13,7 +13,8 @@
     c.) -n [integer between 1 and 10, but less than or equal to integer for -n]
     d.) -t [integer of at least 1]
     e.) -i [integer between 1 and 1000]
+    f.) -f [string for a logfile basename]
 
-    Example: ./oss -n 6 -s 4 -t 3 -i 500
+    Example: ./oss -n 6 -s 4 -t 3 -i 500 -f file.txt
 
 3.) git information can be found in the '.git' folder inside this project submission. 
