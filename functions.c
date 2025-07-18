@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 
+/************************************************PROGRAM INITIALIZATION************************************************/
 void initializeLogfile() {
    logOutputFP = fopen(logfile, "w");
 
@@ -42,7 +43,6 @@ void checkForOptargEntryError(int value, char getoptArgument[]) {
       printf("ERROR in oss.c: User must enter an integer between 1 and 1000 for argument %s.\n\n", getoptArgument);
 
       exit(-1);
-
    }
    if ((strcmp(getoptArgument, "-n [proc]") != 0) || (strcmp(getoptArgument, "-i [intervalInMSToLaunchChildren]") != 0)) {
       if (value <= 0) {
@@ -52,7 +52,6 @@ void checkForOptargEntryError(int value, char getoptArgument[]) {
       }
    }
 }
-
 
 // Displays error message if # of simlataneous processes exceeds the total process count.
 void checkForSimulExceedsProcError(int simulProcesses, int totalProcesses) {
@@ -64,7 +63,7 @@ void checkForSimulExceedsProcError(int simulProcesses, int totalProcesses) {
 }
 
 /***********************************************SYSTEM CLOCK OPERATIONS************************************************/
-// Adjust system time's seconds and nanoseconds.
+// Adjust system time's seconds and nanoseconds. System time is 250 ms DIVIDED BY number of running processes.
 long long int incrementClock(int *seconds, long long int *nanoseconds, int activeChildrenCount) {
    long long int increment;
    long long int remainder;
@@ -75,12 +74,11 @@ long long int incrementClock(int *seconds, long long int *nanoseconds, int activ
       increment = oneQuarterSecond / activeChildrenCount;
       remainder = oneQuarterSecond % activeChildrenCount;
    }
-
    else {
       increment = oneQuarterSecond;
       remainder = 0;
    }
-
+	
    (*nanoseconds) += increment;
    remainderValue += remainder;
 
@@ -89,12 +87,10 @@ long long int incrementClock(int *seconds, long long int *nanoseconds, int activ
 
       remainderValue -= activeChildrenCount;
    }
-
    if (*nanoseconds >= oneBillionNanoseconds) {
        *nanoseconds = 0;
        (*seconds)++;
    }
-
    systemNanoOnly = convertSystemTimeToNanosecondsOnly(seconds, nanoseconds);
    
    return increment;
@@ -113,12 +109,10 @@ long int randomizeChildNanoseconds(int childTimeLimitSecs, int randomSeconds) {
    if (childTimeLimitSecs == randomSeconds) {
       return 0;
    }
-
    else {
       srand(time(NULL) ^ getpid());
-
+	   
       return (rand() % (oneBillionNanoseconds + 1));
-
    }
 }
 
@@ -157,7 +151,6 @@ int addToProcessTable(pid_t pid) {
             processTable[i].startSeconds++;
             processTable[i].startNanoseconds = 0;
          }
-
          return i;
       }
    }
@@ -191,12 +184,10 @@ void printProcessTable() {
       // If column 5 (startNanoseconds) has a large number, reduce tabbing.
       if (processTable[i].occupied == 1 && processTable[i].startNanoseconds >= 1000000) {
          printf("%d\t %d\t\t %d\t\t %d\t %ld\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-      }	
-	 
+      }	 
       else {
          printf("%d\t %d\t\t %d\t\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
       }
-
    }
    printf("\n");
 }
@@ -285,7 +276,6 @@ void periodicallyTerminateProgram(int signal) {
    printf("SIGALRM in oss.c; This program has ran for 60 seconds.\n");
    printf("Now terminating all child processes...\n\n");
 
-
    int i;
    for (i = 0; i < 20; i++) {
       if (processTable[i].occupied == 1) {
@@ -293,7 +283,6 @@ void periodicallyTerminateProgram(int signal) {
 
          if (processID > 0) {
             kill(processTable[i].processID, SIGTERM);
-
             printf("Signal SIGTERM was sent to PID %d\n", processID);
          }
       }
