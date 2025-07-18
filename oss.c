@@ -10,6 +10,7 @@
 // This time, process launches will depend on a simulated system clock as well as a memory queue.
 
 
+#include "functions.h"
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -46,7 +47,7 @@
 // Initializes a log file to store message queue information.
 char logfile[105] = "logfile.txt";
 char suffix[] = ".txt";
-
+FILE *logOutputFP = NULL;
 
 // Creates and attaches two shared memory identifiers (plus one for a log file).
 int secondsShmid = shmget(SHMKEY1, INT_BUFFER_SIZE, 0777 | IPC_CREAT);
@@ -58,25 +59,8 @@ long int *nanosecondsShared = (long int *)shmat(nanoShmid, 0, 0);
 int logfileShmid = shmget(SHMKEY3, LOGFILE_BUFFER_SIZE, 0777 | IPC_CREAT);
 char *logfileFP = (char *)shmat(logfileShmid, 0, 0);
 
-
 // A process table holds information about each child process.
-struct PCB {
-   int occupied;                        // Is the entry in the process table empty (0) or full (1)?
-   pid_t processID;                     // Child's process ID.
-   int startSeconds;                    // Time when a process forked (in seconds).
-   long int startNanoseconds;           // Time when a process forked (in nanoseconds).
-   int messagesSent;                    // # of messages sent by parent process for a child.
-};
-struct PCB processTable[20];
-
-
-// Holds message queue information.
-typedef struct messageBuffer {
-   long int messageType;
-   char stringData[100];
-   int integerData;
-} messageBuffer;
-
+struct PCB processTable[PROCESS_COUNT];
 
 // Initializes information for message buffer.
 messageBuffer sendBuffer;
@@ -84,12 +68,10 @@ messageBuffer receiveBuffer;
 int messageQueueID;
 key_t key;
 
-
 // Places nanosecond values into variables for easier code readability.
 long int halfBillionNanoseconds = 500000000;
 long int oneBillionNanoseconds = 1000000000;
 long int oneQuarterSecond = 250000000;
-
 
 // Initialization of simulated system time. Increments every (250 / number of active processes) seconds.
 int systemClockSeconds = 0;
@@ -97,7 +79,6 @@ long long int systemClockNano = 0;
 long long int systemNanoOnly = 0;                                
 
 long int systemClockIncrement = oneQuarterSecond;
-
 
 // Uses system nanoseconds to determine when next process should launch.
 long long int currentLaunchTimeNano = systemClockIncrement;
@@ -107,21 +88,6 @@ int nextLaunchTimeSeconds = 0;
 
 // For determining the child process order in which messages are to be sent.
 int currentChildIndex = 0;
-
-
-// Function prototypes.
-void checkForOptargEntryError(int, char []);
-void checkForSimulExceedsProcError(int, int);
-long long int incrementClock(int *, long long int *, int);
-long long int convertSystemTimeToNanosecondsOnly (int *, long long int *); 
-int randomizeChildSecondsLimit(int);
-long int randomizeChildNanoseconds(int, int);
-long long int determineNextLaunchNanoseconds(int, long long int);
-int addToProcessTable(pid_t);
-void removeFromProcessTable(pid_t);
-void printProcessTable();
-void printHelpMessage();
-void periodicallyTerminateProgram(int);
 
 
 
@@ -214,6 +180,7 @@ int main(int argc, char** argv) {
    bool processesFinished = false;
    int childrenActive = 0;                                          // # of children running simultaneously (not to be confused with 'proc').
    int totalChildrenLaunched = 0;                                   // # of children launched so far (not to be confused with 'simul').  
+   int totalMessagesSent = 0;
    int nextChild = 0;
   
 
@@ -222,33 +189,10 @@ int main(int argc, char** argv) {
    *nanosecondsShared = 0;
 
 
-   // Creates .txt file to store message update information from oss.c (this file).
-   FILE *logOutputFP = fopen(logfile, "w");
-   
-   if (logOutputFP == NULL) {
-      printf("ERROR in oss.c: cannot create a log file named '%s'", logfile);
-
-      exit(-1);
-   }
-
-
-   // Attempts to set up a message queue.
-   if ((key = ftok(logfile, 1)) == -1) {
-      printf("ERROR in oss.c: problem with ftok() function.\n");
-      printf("Cannot access a key for message queue initialization.\n\n");
-
-      exit(-1);
-   }
-
-   if ((messageQueueID = msgget(key, PERMISSIONS | IPC_CREAT)) == -1) {
-      printf("ERROR in oss.c: problem with msgget() function.\n");
-      printf("Cannot acquire a message queue ID for initialization.\n\n");
-
-      exit(-1);
-   }
-   printf("Message queue is now set up.\n\n");
-
-
+   // Creates .txt file and message queue to store message update information from oss.c (this file).
+   initializeLogfile();
+   initializeMessageQueue();
+  
    // Signal handler for terminating program after 60 real-life seconds.
    signal(SIGALRM, periodicallyTerminateProgram);
    alarm(60);
@@ -329,31 +273,23 @@ int main(int argc, char** argv) {
 
 
       // For-loop acts as a Round Robin scheduling mechanism to determine which child should receive the next message from the parent.
-      for (nextChild = 0; nextChild < totalChildrenLaunched; nextChild++) {	 
-	 
-	      
+      for (nextChild = 0; nextChild < totalChildrenLaunched; nextChild++) {	 	      
 	 // Print process table for every half second of simulated system time.
          if ((systemClockNano == halfBillionNanoseconds || systemClockNano == 0)  && (nextChild == 0)) {
             printProcessTable();
          }
          
-
          if (processTable[nextChild].occupied == 1) {	    
 	    // A buffer stores information about what will be sent to a child.
             sendBuffer.messageType = processTable[nextChild].processID;
             sendBuffer.integerData = processTable[nextChild].occupied;
             snprintf(sendBuffer.stringData, sizeof(sendBuffer.stringData), "Message sent to child %d again. Child is still running.", nextChild);
 
-
-	    // Parent process sends a message to a child process. Output printed to a logfile.
-            if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
-               printf("ERROR in oss.c: Problem with msgsnd() function.\n");
-               printf("Cannot send message to worker.c.\n\n");
-
-               exit(-1);
-            }
-
-            printf("OSS: Sending message to Worker #%d PID %ld at time %d:%lld\n", nextChild, sendBuffer.messageType, systemClockSeconds, systemClockNano);
+	    // Parent process sends a message to a child process.
+	    sendMessageToUSER();
+	    totalMessagesSent++;
+	    
+	    printf("OSS: Sending message to Worker #%d PID %ld at time %d:%lld\n", nextChild, sendBuffer.messageType, systemClockSeconds, systemClockNano);
             fprintf(logOutputFP, "OSS: Sending message to Worker #%d PID %ld at time %d:%lld\n", nextChild, sendBuffer.messageType, systemClockSeconds, systemClockNano);
             fflush(logOutputFP);
    
@@ -365,46 +301,32 @@ int main(int argc, char** argv) {
                // Do nothing.
             }
 
-
             // Another buffer stores info about what the parent receives from a child.
             receiveBuffer.messageType = processTable[nextChild].processID;
             receiveBuffer.integerData = processTable[nextChild].occupied;
 
- 		  
 	    // Parent process receives a message from a child process. Output printed to a logfile.
-	    if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), processTable[nextChild].processID, 0) == -1) {
-               printf("ERROR in oss.c: Problem with msgrcv() function.\n");
-               printf("Cannot receive message from worker.c.\n\n");
+	    receiveMessageFromUSER(nextChild); 
 
-               exit(-1);
-	    } 
 	    printf("OSS: Receiving message from Worker #%d PID %ld at time %d:%lld\n", nextChild, receiveBuffer.messageType, systemClockSeconds, systemClockNano);
 	    fprintf(logOutputFP, "OSS: Receiving message from Worker #%d PID %ld at time %d:%lld\n", nextChild, receiveBuffer.messageType, systemClockSeconds, systemClockNano);
             fflush(logOutputFP);
 
 	    processTable[nextChild].messagesSent++;
 
-
 	    // If a child process will end, output in console and logfile that it will do so.
 	    if (receiveBuffer.integerData == 0) {
 	       removeFromProcessTable(receiveBuffer.messageType);
-               //childrenActive--;
-                // nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
-
+        
 	       printf("**OSS: Worker #%d PID %ld is planning to terminate.**\n\n", nextChild, receiveBuffer.messageType);
 	       fprintf(logOutputFP, "**OSS: Worker #%d PID %ld is planning to terminate.**\n\n", nextChild, receiveBuffer.messageType);
                fflush(logOutputFP);
-            }
-
-
-	    if ((systemNanoOnly - nextLaunchTimeNano >= (long double) oneQuarterSecond) ||
-               (systemNanoOnly - nextLaunchTimeNano >= 0)) {
-               break;
-            }	 
+            } 
 	 } 
 	 
 	 // If no more children are running and the maximum # of total children have been launched, end loop/program.
          if (childrenActive == 0 && totalChildrenLaunched == proc) {
+            printf("\n\nAll %d children have finished running. Now terminating program.\n", proc);
             processesFinished = true;
 
             break;
@@ -436,290 +358,13 @@ int main(int argc, char** argv) {
       }
    }
    printProcessTable();
-
-
    fclose(logOutputFP);
-
-
-   // Detach from and clear shared memory.
-   shmdt(secondsShared);
-   shmdt(nanosecondsShared);
-   shmdt(logfileFP);
-   shmctl(secondsShmid, IPC_RMID, NULL);
-   shmctl(nanoShmid, IPC_RMID, NULL);
-   shmctl(logfileShmid, IPC_RMID, NULL);
-
-   // Remove the message queue.
-   if (msgctl(messageQueueID, IPC_RMID, NULL) == -1) {
-      printf("ERROR in oss.c: problem with msgctl() function.\n");
-      printf("Cannot delete or remove message queue.\n\n");
-
-      exit(-1);
-   }
-
+   detachAndClearSharedMemory();
+   removeMessageQueue();
+  
+   printf("Program successfully terminated.\n\n\n");
+   printProgramSummary(proc, totalMessagesSent);
+   
 
    return EXIT_SUCCESS;
 }
-
-
-
-
-// Displays error messages based on 'optarg' arguments.
-void checkForOptargEntryError(int value, char getoptArgument[]) {
-   if ((value <= 0 || value > 10)  && (strcmp(getoptArgument, "-n [proc]") == 0)) {
-      printf("ERROR in oss.c: User must enter an integer between 1 and 10 for argument %s.\n\n", getoptArgument);
-
-      exit(-1);
-   }
-   if ((value <= 0 || value > 1000) && (strcmp(getoptArgument, "-i [intervalInMSToLaunchChildren]") == 0)) {
-      printf("ERROR in oss.c: User must enter an integer between 1 and 1000 for argument %s.\n\n", getoptArgument);
-
-      exit(-1);
-
-   }
-   if ((strcmp(getoptArgument, "-n [proc]") != 0) || (strcmp(getoptArgument, "-i [intervalInMSToLaunchChildren]") != 0)) {
-      if (value <= 0) {
-         printf("ERROR in oss.c: User must enter a positive integer for argument %s.\n\n", getoptArgument);
-
-         exit(-1);
-      }
-   }
-}
-
-
-// Displays error message if # of simlataneous processes exceeds the total process count.
-void checkForSimulExceedsProcError(int simulProcesses, int totalProcesses) {
-   if (simulProcesses > totalProcesses) {
-      printf("ERROR in oss.c: The -s [simul] value '%d' cannot be greater than the -n [proc] value '%d'.\n\n", simulProcesses, totalProcesses);
-
-      exit(-1);
-   }
-}
-
-
-// Adjust system time's seconds and nanoseconds.
-long long int incrementClock(int *seconds, long long int *nanoseconds, int activeChildrenCount) {
-   long long int increment;
-   long long int remainder;
-
-   static long long int remainderValue = 0;
-  
-   if (activeChildrenCount > 0) {
-      increment = oneQuarterSecond / activeChildrenCount;
-      remainder = oneQuarterSecond % activeChildrenCount;
-   }
-
-   else {
-      increment = oneQuarterSecond;
-      remainder = 0;
-   }
-
-   (*nanoseconds) += increment;
-   remainderValue += remainder;
-
-   if (activeChildrenCount > 0 && remainderValue >= activeChildrenCount) {
-      *nanoseconds += 1;
-
-      remainderValue -= activeChildrenCount;
-   }
-
-   if (*nanoseconds >= oneBillionNanoseconds) {
-       *nanoseconds = 0;
-       (*seconds)++;
-   }
-
-   systemNanoOnly = convertSystemTimeToNanosecondsOnly(seconds, nanoseconds);
-   
-   return increment;
-}
-
-long long int convertSystemTimeToNanosecondsOnly (int *seconds, long long int *nanoseconds) {
-   long long int nanosecondsWithoutSecs = *nanoseconds;
-   int i;
-   for (i = 1; i <= (*seconds); i++) {
-      nanosecondsWithoutSecs += oneBillionNanoseconds;
-   }
-
-   return nanosecondsWithoutSecs;
-}
-      
-
-
-// Generates a value between 1 and [timeLimitForChildren].
-int randomizeChildSecondsLimit(int childTimeLimit) {
-   srand(time(NULL) ^ getpid());
-
-   return (rand() % childTimeLimit) + 1;
-}
-
-
-// Generates a random number of nanoseconds.
-// Prevents nanoseconds from being nonzero when random # of seconds equals user-inputted maximum.
-long int randomizeChildNanoseconds(int childTimeLimitSecs, int randomSeconds) {
-   if (childTimeLimitSecs == randomSeconds) {
-      return 0;
-   }
-
-   else {
-      srand(time(NULL) ^ getpid());
-
-      return (rand() % (oneBillionNanoseconds + 1));
-
-   }
-}
-
-
-// Only deals with system nanoseconds to determine next launch time. 
-long long int determineNextLaunchNanoseconds (int intervalMS, long long int currentNanoTime) {
-    long long int nanoConversion = (long long int)intervalMS * 1000000;
-    long double newLaunchTime = (long double) currentNanoTime + nanoConversion;
-
-    return newLaunchTime;
-}
-
-      
-// These three function manage and print entries in the PCB table.
-int addToProcessTable(pid_t pid) {
-   int i;
-   for (i = 0; i < 20; i++) {
-      if (processTable[i].occupied == 0) {
-         processTable[i].occupied = 1;
-         processTable[i].processID = pid;
-         processTable[i].startSeconds = systemClockSeconds;
-         processTable[i].startNanoseconds = systemClockNano;
-	 processTable[i].messagesSent = 0;
-
-	 if (systemClockNano == oneBillionNanoseconds) {
-            processTable[i].startSeconds++;
-            processTable[i].startNanoseconds = 0;
-         }
-
-         return i;
-      }
-   }
-   // If table is full, return this value to print an error in main() function.
-   return -1;
-}
-void removeFromProcessTable(pid_t pid) {
-   int i;
-   for (i = 0; i < 20; i++) {
-      if (processTable[i].processID == pid) {
-         processTable[i].occupied = 0;
-         processTable[i].processID = 0;
-         processTable[i].startSeconds = 0;
-         processTable[i].startNanoseconds = 0;
-         processTable[i].messagesSent = 0;
-
-         break;
-      }
-   }
-}
-void printProcessTable() {
-   printf("\nOSS PID: %d  SysClockS: %d  SysClockNano: %lld\n", getpid(), systemClockSeconds, systemClockNano);
-   printf("Process Table:\n");
-   printf("Entry\t Occupied\t PID\t\t StartS\t StartN\t\t MessagesSent\n");
-
-   int i;
-
-   for (i = 0; i < 20; i++) {
-      // If column 5 (startNanoseconds) has a large number, reduce tabbing.
-      if (processTable[i].occupied == 1 && processTable[i].startNanoseconds >= 1000000) {
-            printf("%d\t %d\t\t %d\t\t %d\t %ld\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-	 }	
-	 
-        /* else {
-	    printf("%d\t %d\t\t %d\t\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-         } 
-      }*/
-      else {
-         printf("%d\t %d\t\t %d\t\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-      }
-
-   }
-
-   printf("\n");
-}
-
-
-// Displays a help message if user enters './oss -h'.
-void printHelpMessage() {
-   printf("\n\n\nThis program displays information about child and parent processes, including:\n");
-   printf("\t1.) Process IDs (or PIDs).\n");
-   printf("\t2.) Parent process IDs (or PPIDs).\n");
-   printf("\t3.) A Process Control Block (PCB) table with child process entry information.\n");
-   printf("\t4.) System clock and termination times for child processes.\n\n");
-
-
-   printf("\n\nTo execute this program, type './oss', then type in any combination of options:\n\n\n");
-   printf("Option:                       What to enter after option:               Default values (if argu-      Description:\n");
-   printf("                                                                         ment is not entered):\n\n");
-   printf("  -h                           > nothing.                                 > (not applicable)           > Displays this help menu.\n"); 
-   printf("  -n [proc]                    > an integer between 1 and 10.             > defaults to 1.             > Runs a total # of processes.\n");
-   printf("  -s [simul]                   > an integer smaller than '-n [proc]'.     > defaults to 1.             > Runs a max # of processes simultaneously.\n");
-   printf("  -t [timeLimitForChildren]    > an integer of at least 1.                > defaults to 1.             > Runs each process between 1 and\n");
-   printf("                                                                                                          [timeLimitForChildren] seconds.\n");
-   printf("  -i [intervalInMS             > an integer between 1 and 1000.           > defaults to 500.           > Runs a new process every [interval\n");
-   printf("       ToLaunchChildren]                                                                                  inMSToLaunchChildren] milliseconds.\n");
-   printf("  -f [logfile]                 > a file's basename.                       > defaults to 'logfile'      > Stores output relating to parent and\n");
-   printf("                                                                                                          child processes.\n\n\n"); 
-
-   printf("For example, typing './oss -n 6 -s 4 -t 5 -i 600 -f storage' will run:\n");
-   printf("\t1.) a total of 6 processes.\n");
-   printf("\t2.) a maximum of 4 processes simultaneously.\n");
-   printf("\t3.) each process for a duration between 1 and 5 seconds. Duration is randomly selected.\n");
-   printf("\t4.) a new process every 600 milliseconds.\n");
-   printf("\t5.) while storing message statuses inside a file called 'storage.txt'.\n\n\n");
-
-   exit(0);
-}
-
-
-// Gracefully terminates program after 60 real life seconds.
-void periodicallyTerminateProgram(int signal) {
-   printf("SIGALRM in oss.c; This program has ran for 60 seconds.\n");
-   printf("Now terminating all child processes...\n\n");
-
-
-   int i;
-   for (i = 0; i < 20; i++) {
-      if (processTable[i].occupied == 1) {
-         pid_t processID = processTable[i].processID;
-
-         if (processID > 0) {
-            kill(processTable[i].processID, SIGTERM);
-
-            printf("Signal SIGTERM was sent to PID %d\n", processID);
-         }
-      }
-   }
-   printf("\nChild process termination complete.\n");
-   printf("Now freeing shared memory...\n");
-
-  
-   // Detach from and clear shared memory.
-   shmdt(secondsShared);
-   shmdt(nanosecondsShared);
-   shmdt(logfileFP);
-   shmctl(secondsShmid, IPC_RMID, NULL);
-   shmctl(nanoShmid, IPC_RMID, NULL);
-   shmctl(logfileShmid, IPC_RMID, NULL);
-
-   printf("\nShared memory detachment and deletion complete.\n");
-   printf("Now deleting the message queue...\n");
-
-   // Remove the message queue.
-   if (msgctl(messageQueueID, IPC_RMID, NULL) == -1) {
-      printf("ERROR in oss.c: problem with msgctl() function.\n");
-      printf("Cannot delete or remove message queue.\n\n");
-
-      exit(-1);
-   }
-
-   printf("\nMessage queue removal and deletion complete.\n");
-   printf("Now exiting program...\n\n");
-
-   exit(0);
-}
-
-
-
