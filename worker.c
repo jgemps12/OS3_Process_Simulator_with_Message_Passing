@@ -1,14 +1,5 @@
-/* Jesse Gempel
- * 3/18/2025
- * Professor Mark Hauschild
- * CMP SCI 4760-001
-*/
-
-
 // The worker.c file works with CHILD processes.
 // It prints out child and parent process IDs, as well as child process and termination times, to the user for each iteration.
-
-
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -126,7 +117,6 @@ int main(int argc, char** argv) {
       int secondsAfterMemRead = systemClockSeconds;                                               // After read.
 
       systemClockNano = *sharedNanoseconds;
-
       int secondsRan = getElapsedTimeSeconds(initialSystemClockSecs, systemClockSeconds);
 
       // Slow down program to prevent race conditions between Process Table and printf() message times (for oss.c and worker.c, respectively).
@@ -154,11 +144,9 @@ int main(int argc, char** argv) {
          sendBuffer.messageType = getpid();
          sendBuffer.integerData = 1;
 	 sendMessageToOSS();
-
 	 iterations++;
 
          printf("WORKER PID: %d   PPID: %d  SysClockS: %d  SysClockNano: %ld  TermTimeS: %d  TermTimeNano: %ld ---%ld iteration(s) have passed since starting\n", getpid(), getppid(), systemClockSeconds, systemClockNano, childTerminationTimeSeconds, childTerminationTimeNano, iterations);
-         
       }
    }
    while (1);
@@ -170,7 +158,6 @@ int main(int argc, char** argv) {
 
 
    return EXIT_SUCCESS;
-
 }
 
 // Attempts to set up a message queue.
@@ -181,7 +168,6 @@ void initializeMessageQueue() {
 
       exit(-1);
    }
-
    if ((messageQueueID = msgget(key, PERMISSIONS)) == -1) {
       printf("ERROR in worker.c: problem with msgget() function.\n");
       printf("Cannot acquire a message queue ID for initialization.\n\n");
@@ -194,7 +180,6 @@ int getTerminationTimeSeconds(int processSeconds, int systemClockSeconds) {
    return processSeconds + systemClockSeconds;
 }
 
-
 // The point in simulated system time when child terminates.
 long int getTerminationTimeNano (long int processNanoseconds, long int systemClockNano, int *termSeconds) {
    long int terminationNano = processNanoseconds + systemClockNano;
@@ -204,7 +189,6 @@ long int getTerminationTimeNano (long int processNanoseconds, long int systemClo
       (*termSeconds)++;
       terminationNano -= oneBillionSeconds;
    }
-
    return terminationNano;
 }
 
@@ -217,7 +201,6 @@ void sendMessageToOSS() {
    if (msgsnd(messageQueueID, &sendBuffer, sizeof(messageBuffer) - sizeof(long int), 0) == -1) {
       printf("ERROR in worker.c: Problem with msgsnd() function.\n");
       printf("Cannot send message to oss.c.\n\n");
-
       exit(-1);
    }
 }
@@ -226,7 +209,6 @@ void receiveMessageFromOSS() {
    if (msgrcv(messageQueueID, &receiveBuffer, sizeof(messageBuffer), getpid(), 0) == -1) {
       printf("ERROR in worker.c: Problem with msgrcv() function.\n");
       printf("Cannot receive message from worker.c.\n\n");
-
       exit(-1);
    }
 }
