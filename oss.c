@@ -1,14 +1,6 @@
-/* Jesse Gempel
- * 3/18/2025
- * Professor Mark Hauschild
- * CMP SCI 4760-001
-*/
-
-
 // The oss.c file works with PARENT processes.
 // It launches a specific number of user processes with user input gathered from the 'getopt()' switch statement. 
 // This time, process launches will depend on a simulated system clock as well as a memory queue.
-
 
 #include "functions.h"
 #include <unistd.h>
@@ -24,25 +16,20 @@
 #include <signal.h>
 #include <time.h>
 
-
 // Starting a memory segment for system clock seconds.
 #define SHMKEY1 42069
 #define INT_BUFFER_SIZE sizeof(int)
-
 
 // Starting a memory segment for system clock nanoseconds.
 #define SHMKEY2 42070
 #define LONG_BUFFER_SIZE sizeof(long int)
 
-
 // Starting a memory segment for a log file.
 #define SHMKEY3 42071
 #define LOGFILE_BUFFER_SIZE 105
 
-
 // Permissions for memory queue.
 #define PERMISSIONS 0644
-
 
 // Initializes a log file to store message queue information.
 char logfile[105] = "logfile.txt";
@@ -77,7 +64,6 @@ long int oneQuarterSecond = 250000000;
 int systemClockSeconds = 0;
 long long int systemClockNano = 0;
 long long int systemNanoOnly = 0;                                
-
 long int systemClockIncrement = oneQuarterSecond;
 
 // Uses system nanoseconds to determine when next process should launch.
@@ -88,7 +74,6 @@ int nextLaunchTimeSeconds = 0;
 
 // For determining the child process order in which messages are to be sent.
 int currentChildIndex = 0;
-
 
 
 int main(int argc, char** argv) {  
@@ -111,32 +96,27 @@ int main(int argc, char** argv) {
    char timeLimitName[] = "-t [timeLimitForChildren]";
    char intervalName[] = "-i [intervalInMSToLaunchChildren]";
    char logfileName[] = "-f [logfile]";
-
    
    while ((opt = getopt(argc, argv, "hn:s:t:i:f:")) != -1) {
       switch (opt) {
          case 'h':
             printHelpMessage();
-
 	    break;
 
          case 'n':
             proc = atoi(optarg);
 	    checkForOptargEntryError(proc, procName);
-
             break;
 
          case 's':
             simul = atoi(optarg);
             checkForOptargEntryError(simul, simulName);
 	    checkForSimulExceedsProcError(simul, proc);
-
             break;
 
          case 't':
             timeLimitForChildren = atoi(optarg);
             checkForOptargEntryError(timeLimitForChildren, timeLimitName);
-	    
             break;
 
 	 case 'i':
@@ -167,15 +147,11 @@ int main(int argc, char** argv) {
          default:
 	    printf("ERROR in oss.c: Arguments are invalid or you forgot to input a value for them.\n");
 	    printf("Please type './oss -h' for help.\n\n");
-
             exit(-1);
 
  	    break;
       }
    }
-
-
-
 
    bool processesFinished = false;
    int childrenActive = 0;                                          // # of children running simultaneously (not to be confused with 'proc').
@@ -183,11 +159,9 @@ int main(int argc, char** argv) {
    int totalMessagesSent = 0;
    int nextChild = 0;
   
-
    // Initializes shared memory segments.
    *secondsShared = 0;
    *nanosecondsShared = 0;
-
 
    // Creates .txt file and message queue to store message update information from oss.c (this file).
    initializeLogfile();
@@ -197,20 +171,16 @@ int main(int argc, char** argv) {
    signal(SIGALRM, periodicallyTerminateProgram);
    alarm(60);
 
-
    while (processesFinished == false) {
       systemClockIncrement = incrementClock(&systemClockSeconds, &systemClockNano, childrenActive);
-
-
+	   
       // System time in shared memory constantly updates in loop.
       *secondsShared = systemClockSeconds;
       *nanosecondsShared = systemClockNano;
 
-
       // If children are still available to launch simultaneously.
       if (childrenActive < simul && totalChildrenLaunched < proc) {
          pid_t processID;
-
 
          // Spinlock ('while' loop) prevents multiple Process Tables from printing out in short time bursts.
          while (systemNanoOnly - nextLaunchTimeNano != (long double) oneQuarterSecond) {
@@ -221,11 +191,9 @@ int main(int argc, char** argv) {
            }
 	   systemClockIncrement = incrementClock(&systemClockSeconds, &systemClockNano, childrenActive); 
 	   
-
            // Launches a child based on [intervalInMSToLaunchChildren].
 	   if ((systemNanoOnly - nextLaunchTimeNano >= (long double) oneQuarterSecond) ||
-               (systemNanoOnly - nextLaunchTimeNano >= 0)) { 
-	     
+               (systemNanoOnly - nextLaunchTimeNano >= 0)) {   
 	       processID = fork();
               
 	       nextLaunchTimeNano = determineNextLaunchNanoseconds(intervalInMSToLaunchChildren, systemNanoOnly);
@@ -238,7 +206,6 @@ int main(int argc, char** argv) {
             *secondsShared = systemClockSeconds;
             *nanosecondsShared = systemClockNano;
 
-
 	    // Stores randomized child process run times into strings to facilatate execl()'s operation.
             int randomSeconds = randomizeChildSecondsLimit(timeLimitForChildren);
             char randomizedTimeSeconds[50];
@@ -249,14 +216,12 @@ int main(int argc, char** argv) {
 	    sprintf(randomizedTimeSeconds, "%d", randomSeconds);
 	    sprintf(randomizedTimeNanoseconds, "%ld", randomNanoseconds);
 
-
 	    // Run child processes.
 	    execl("./worker", "worker", randomizedTimeSeconds, randomizedTimeNanoseconds, NULL);
 
             printf("ERROR in oss.c: the execl() function has failed. Terminating program.\n\n");
             exit(-1);
          }
-
 
          // Work with parent process. Increment the current # of total children and those running simultaneously.
          // Meanwhile, send a message to a running child process.
@@ -270,7 +235,6 @@ int main(int argc, char** argv) {
 	    }
          }
       }
-
 
       // For-loop acts as a Round Robin scheduling mechanism to determine which child should receive the next message from the parent.
       for (nextChild = 0; nextChild < totalChildrenLaunched; nextChild++) {	 	      
@@ -293,7 +257,6 @@ int main(int argc, char** argv) {
             fprintf(logOutputFP, "OSS: Sending message to Worker #%d PID %ld at time %d:%lld\n", nextChild, sendBuffer.messageType, systemClockSeconds, systemClockNano);
             fflush(logOutputFP);
    
-
 	    // Slow down program to prevent race conditions between times in Process Table and those analyzed in worker.c.
 	    // Also prevents multiple empty Process Tables from printing towards the program's end.
 	    int i; 
@@ -344,7 +307,6 @@ int main(int argc, char** argv) {
             }
          }
 
-
          // If all available children have launched, but not all of them finished, wait for them to terminate.
          if (childrenActive > 0 && totalChildrenLaunched == proc) {
             int status;
@@ -365,6 +327,5 @@ int main(int argc, char** argv) {
    printf("Program successfully terminated.\n\n\n");
    printProgramSummary(proc, totalMessagesSent);
    
-
    return EXIT_SUCCESS;
 }
