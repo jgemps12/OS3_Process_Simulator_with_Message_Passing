@@ -179,17 +179,22 @@ void printProcessTable() {
    printf("Entry\t Occupied\t PID\t\t StartS\t StartN\t\t MessagesSent\n");
 
    int i;
-
    for (i = 0; i < 20; i++) {
-      // If column 5 (startNanoseconds) has a large number, reduce tabbing.
-      if (processTable[i].occupied == 1 && processTable[i].startNanoseconds >= 1000000) {
-         printf("%d\t %d\t\t %d\t\t %d\t %ld\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-      }	 
+      // If row in table is occupied, reduce tabbing after Row #3 (processID).
+      if (processTable[i].occupied == 1) {
+         // Reduce tabbing after Row #5 (startNanoseconds) if startNanoseconds has a large number.
+	 if (processTable[i].startNanoseconds >= 1000000) {
+            printf("%d\t %d\t\t %d\t %d\t %ld\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
+         }
+         else {
+            printf("%d\t %d\t\t %d\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
+         }
+      }
       else {
          printf("%d\t %d\t\t %d\t\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
       }
    }
-   printf("\n");
+   printf("\n");	
 }
 
 /********************************************MESSAGE PASSING OPERATIONS************************************************/
