@@ -82,10 +82,8 @@ int main(int argc, char** argv) {
    // Otherwise, present error and terminate program.
    if (argc != 3) {
       printf("ERROR in 'worker.c': You must enter ./worker followed by two integers.\n\n");
-
       printf("Integer 1: the maximum time limit for a child process (in seconds).\n");
       printf("Integer 2: the # of nanoseconds AFTER seconds time limit has been reached.\n\n");
-
       printf("Example: ./worker 5 200000\n\n");
 
       exit(-1);
