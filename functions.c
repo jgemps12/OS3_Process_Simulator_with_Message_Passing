@@ -174,25 +174,19 @@ void removeFromProcessTable(pid_t pid) {
 void printProcessTable() {
 	printf("\nOSS PID: %d  SysClockS: %d  SysClockNano: %lld\n", getpid(), systemClockSeconds, systemClockNano);
 	printf("Process Table:\n");
-	printf("Entry\t Occupied\t PID\t\t StartS\t StartN\t\t MessagesSent\n");
+	printf("%-9s %-12s %-10s %-10s %-13s %-12s", "Entry", "Occupied", "PID", "StartS", "StartN", "MessagesSent\n");
 	
-	int i;
+	int i;	
 	for (i = 0; i < 20; i++) {
-		// If row in table is occupied, reduce tabbing after Row #3 (processID).
-		if (processTable[i].occupied == 1) {
-			// Reduce tabbing after Row #5 (startNanoseconds) if startNanoseconds has a large number.
-			if (processTable[i].startNanoseconds >= 1000000) {
-				printf("%d\t %d\t\t %d\t %d\t %ld\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-			}
-			else {
-				printf("%d\t %d\t\t %d\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-			}
-		}
-		else {
-			printf("%d\t %d\t\t %d\t\t %d\t %ld\t\t %d\n", i, processTable[i].occupied, processTable[i].processID, processTable[i].startSeconds, processTable[i].startNanoseconds, processTable[i].messagesSent);
-		}
+		// Prints first 3 columns (Entry, Occupied, PID).
+		printf("%-9d %-12d %-11d", i, processTable[i].occupied, processTable[i].processID);
+		
+		// Prints columns 4 and 5 (StartS, StartN).
+		printf("%-10d %-14ld", processTable[i].startSeconds, processTable[i].startNanoseconds);
+		
+		// Prints column 6 (MessagesSent).
+		printf("%-7d\n", processTable[i].messagesSent);
 	}
-	printf("\n");	
 }
 
 /********************************************MESSAGE PASSING OPERATIONS************************************************/
