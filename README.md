@@ -23,6 +23,24 @@ sent by OSS (i.e. the parent) while **Round-Robin Scheduling** determines the or
   - Number of **messages sent**.
 - Ensures clean termination of all processes to avoid zombie processes.
 
+## System Clock Operations:
+Throughout the duration of the program, the **simulated system clock** increments at a rate of 
+
+$$
+\text{\\# milliseconds} 
+= \frac{\text{250 ms}}{\\# \text{active processes}}
+$$
+
+For instance, if **4 active processes** exist in the system, then the system clock will increment in this manner:
+
+$$
+\text{\\# milliseconds} 
+= \frac{\text{250 ms}}{\text{4 processes}} 
+= \textbf{62.5 ms}
+$$
+
+During this instance as shown above, the clock increments every **62.5 milliseconds**. The number of active processes ranges between 1 and `-s` processes, where `-s` is the maximum number of processes running concurrently. Since child processes constantly enter and exit the system, the system clock will increment at various rates due to `-s` constantly changing. This setup aims to simulate "slowing down" of the clock when the system is busy.
+
 ## How to Compile and Run:
 
 1.) To *compile* the program, type:
@@ -44,7 +62,7 @@ make
 |  `-i`  | an integer >= 1.             | No (default=500)      | Sets an interval between child process launches (in *milliseconds*).                                |
 |  `-f`  | a string.                    | No (default="logfile")| Sets a basename for a .txt file, which stores logging information about child processes.            |
 
-## Examples:
+## Example Input:
 ### Example 1:
 Upon typing this command into the terminal:
 ```bash
@@ -69,9 +87,10 @@ The program runs:
 - A new process **incremented** to every 500 ms.
 - A file called **logfile.txt** stores information about each child's message sending, retrieval, and termination.
 
-## Sample Output
+## Example Output:
 
-### Output from Console
+### Example 1: Console Log Output
+
 ```bash
 OSS: Sending message to Worker #0 PID 1532282 at time 0:500000000
 WORKER PID: 1532282   PPID: 1532281  SysClockS: 0  SysClockNano: 500000000  TermTimeS: 6  TermTimeNano: 755279253 ---Just starting
@@ -91,7 +110,7 @@ Total messages sent from OSS:        475
 ***********************************************************
 
 ```
-### Output from Log File
+### Example 2: Log File Output
 ```bash
 OSS: Sending message to Worker #0 PID 1532282 at time 1:479166666
 OSS: Receiving message from Worker #0 PID 1532282 at time 1:479166666
@@ -99,7 +118,7 @@ OSS: Sending message to Worker #1 PID 1532283 at time 1:479166666
 OSS: Receiving message from Worker #1 PID 1532283 at time 1:479166666
 OSS: Sending message to Worker #2 PID 1532284 at time 1:479166666
 ```
-### Output from Process Control Block (PCB) Table
+### Example 3: Process Control Block (PCB) Table Output
 Every half second of simulated system time, a Process Table prints to the console as shown below:
 
 ```
