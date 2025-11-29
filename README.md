@@ -62,34 +62,21 @@ make
 |  `-i`  | an integer >= 1.             | No (default=500)      | Sets an interval between child process launches (in *milliseconds*).                                |
 |  `-f`  | a string.                    | No (default="logfile")| Sets a basename for a .txt file, which stores logging information about child processes.            |
 
-## Example Input:
-### Example 1:
-Upon typing this command into the terminal:
-```bash
-./oss -n 6 -s 4 -t 8 -i 150 -f INFO
-```
-The program runs:
-- 6 processes **total**.
-- 4 processes **simultaneously**.
-- Each process for a random time between 1 and 8 **seconds**, with 8 as the **maximum** time.
-- A new process **incremented** to every 150 ms.
-- A file called **INFO.txt** stores information about each child's message sending, retrieval, and termination.
-
-### Example 2:
-Similarly, this command:
-```bash
-./oss -n 8 
-```
-The program runs:
-- 8 processes **total**.
-- 1 processes **simultaneously**.
-- Each process for 1 **second**. 1 is the **maximum** time in this case.
-- A new process **incremented** to every 500 ms.
-- A file called **logfile.txt** stores information about each child's message sending, retrieval, and termination.
-
 ## Example Output:
 
 ### Example 1: Console Log Output
+
+Upon typing this command into the terminal:
+```bash
+./oss -n 3 -s 2 -t 5 -i 200 -f INFO
+```
+This program runs:
+- 3 processes **total**.
+- 2 processes **simultaneously**.
+- Each process for a random time between 1 and 5 **seconds**, with 5 as the **maximum** time.
+- A new process **incremented** to every 200 ms.
+- A file called **INFO.txt** stores information about each child's message sending, retrieval, and termination.
+
 
 ```bash
 OSS: Sending message to Worker #0 PID 1532282 at time 0:500000000
