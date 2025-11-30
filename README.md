@@ -74,29 +74,71 @@ This program runs:
 - 3 processes **total**.
 - 2 processes **simultaneously**.
 - Each process for a random time between 1 and 5 **seconds**, with 5 as the **maximum** time.
-- A new process **incremented** to every 200 ms.
+- Each new process launch **incremented** to a minimum of every 200 ms.
 - A file called **INFO.txt** stores information about each child's message sending, retrieval, and termination.
 
+#### i.) Program Initialization and *msgsnd()*:
+The program begins by using **fork()** to launch a child process with PID **2003552**, which is launched after `500,000,000` nanoseconds of system runtime. The "parent" (i.e., OSS) makes a call to **msgsnd()** to send a message to the child process, which contains information about PIDs, system clock times, and termination times. Meanwhile, the "worker" must receive this information from the parent and provide confirmation through console output. The launch time values for this process are determined by `SysClockS` and `SysClockNano` as shown below:
 
 ```bash
-OSS: Sending message to Worker #0 PID 1532282 at time 0:500000000
-WORKER PID: 1532282   PPID: 1532281  SysClockS: 0  SysClockNano: 500000000  TermTimeS: 6  TermTimeNano: 755279253 ---Just starting
-WORKER PID: 1532282   PPID: 1532281  SysClockS: 0  SysClockNano: 500000000  TermTimeS: 6  TermTimeNano: 755279253 ---1 iteration(s) have passed since starting
-WORKER PID: 1532282   PPID: 1532281  SysClockS: 0  SysClockNano: 500000000  TermTimeS: 6  TermTimeNano: 755279253 ---2 iteration(s) have passed since starting
-OSS: Receiving message from Worker #0 PID 1532282 at time 0:500000000
-...
-...
-WORKER PID: 1532301   PPID: 1532281  SysClockS: 14  SysClockNano: 500000000  TermTimeS: 14  TermTimeNano: 384559769 ---Terminating
-OSS: Receiving message from Worker #0 PID 1532301 at time 14:500000000
-**OSS: Worker #0 PID 1532301 is planning to terminate.**
-All 6 children have finished running. Now terminating program.
-
-**********************PROGRAM SUMMARY**********************
-Total processes launched:            6
-Total messages sent from OSS:        475
-***********************************************************
-
+OSS: Sending message to Worker #0 PID 2003552 at time 0:500000000
+WORKER PID: 2003552   PPID: 2003551  SysClockS: 0  SysClockNano: 500000000  TermTimeS: 5  TermTimeNano: 500000000 ---Just starting
 ```
+**NOTE:** Actual process start times may not necessarily reflect the user input for `-i` due to large increments occurring within the system clock. The example above shows the process starting at 500 ms, even though the user inputted `-i` = 200 ms.
+
+#### ii.) Process Runtime and *msgrcv()*:
+Information about the child process (PID **2003552**) is then received by the worker by utilizing a call to **msgrcv()**. The child process will undergo an **iteration**, meaning that the parent and child must both send and receive messages to and from each other. For these iterations to continue, the worker must *send* a message to OSS using **msgsnd()**, then OSS must *receive* the message through **msgrcv()**. 
+
+The output below demonstrates two events: 
+
+> 1.) The worker displaying the number of iterations for a child process (first two lines).
+
+> 2.) OSS confirming the sending and receiving of messages to a child (last two lines). 
+```bash
+WORKER PID: 2003552   PPID: 2003551  SysClockS: 0  SysClockNano: 500000000  TermTimeS: 5  TermTimeNano: 500000000 ---1 iteration(s) have passed since starting
+WORKER PID: 2003552   PPID: 2003551  SysClockS: 0  SysClockNano: 500000000  TermTimeS: 5  TermTimeNano: 500000000 ---2 iteration(s) have passed since starting
+OSS: Receiving message from Worker #0 PID 2003552 at time 0:500000000
+OSS: Sending message to Worker #0 PID 2003552 at time 1:0
+```
+
+The simulated system clock will continue to iterate until a process can finally terminate. Termination times for Process **2003552** are illustrated by `TermTimeS` and `TermTimeNano` as shown above.
+
+#### iii.) Concurrency
+Even though multiple child processes (i.e., **2003552** and **2003553**) exist concurrently in the system, only one child is allowed to send and receive messages from the parent process at a time. The **Round-Robin scheduling algorithm** decides which child gets to perform message passing at any given time.
+
+```bash
+OSS: Sending message to Worker #0 PID 2003552 at time 1:125000000
+WORKER PID: 2003552   PPID: 2003551  SysClockS: 1  SysClockNano: 125000000  TermTimeS: 5  TermTimeNano: 500000000 ---5 iteration(s) have passed since starting
+WORKER PID: 2003552   PPID: 2003551  SysClockS: 1  SysClockNano: 125000000  TermTimeS: 5  TermTimeNano: 500000000 ---6 iteration(s) have passed since starting
+OSS: Receiving message from Worker #0 PID 2003552 at time 1:125000000
+
+OSS: Sending message to Worker #1 PID 2003553 at time 1:125000000
+WORKER PID: 2003553   PPID: 2003551  SysClockS: 1  SysClockNano: 125000000  TermTimeS: 6  TermTimeNano: 0 ---3 iteration(s) have passed since starting
+WORKER PID: 2003553   PPID: 2003551  SysClockS: 1  SysClockNano: 125000000  TermTimeS: 6  TermTimeNano: 0 ---4 iteration(s) have passed since starting
+OSS: Receiving message from Worker #1 PID 2003553 at time 1:125000000
+```
+(discuss Round-Robin here)
+
+#### iv.) Process Termination
+Since the system clock time is greater than (or in this case, equal to) the termination time for Process **2003552**, the child will now terminate.
+
+```bash
+WORKER PID: 2003552   PPID: 2003551  SysClockS: 5  SysClockNano: 500000000  TermTimeS: 5  TermTimeNano: 500000000 ---Terminating
+```
+#### v.) Program Termination
+Two more process need to run in the system until they reach their termination times and terminate. Child termination is conducted by using a call to **waitpid()**.
+
+```bash
+...
+...
+WORKER PID: 2003554   PPID: 2003551  SysClockS: 11  SysClockNano: 0  TermTimeS: 11  TermTimeNano: 0 ---Terminating
+OSS: Receiving message from Worker #0 PID 2003554 at time 11:0
+**OSS: Worker #0 PID 2003554 is planning to terminate.**
+
+All 3 children have finished running. Now terminating program.
+Program successfully terminated.
+```
+
 ### Example 2: Log File Output
 ```bash
 OSS: Sending message to Worker #0 PID 1532282 at time 1:479166666
