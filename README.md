@@ -104,7 +104,9 @@ OSS: Sending message to Worker #0 PID 2003552 at time 1:0
 The simulated system clock will continue to iterate until a process can finally terminate. Termination times for Process **2003552** are illustrated by `TermTimeS` and `TermTimeNano` as shown above.
 
 #### iii.) Concurrency
-Even though multiple child processes (i.e., **2003552** and **2003553**) exist concurrently in the system, only one child is allowed to send and receive messages from the parent process at a time. The **Round-Robin scheduling algorithm** decides which child gets to perform message passing at any given time.
+Even though multiple child processes (i.e., **2003552** and **2003553**) exist concurrently in the system, only one child is allowed to send and receive messages to and from the parent process at a time. A modified **Round-Robin scheduling algorithm** decides which child can pass messages at any given time. 
+
+**NOTE:** This algorithm is *modified* since Round-Robin scheduling typically runs processes for a fixed amount of time. For this project, a child does not run for predetermined time periods. It must instead pass messages to and from OSS (i.e., the parent) before the next child can run, which can result in variable runtimes.
 
 ```bash
 OSS: Sending message to Worker #0 PID 2003552 at time 1:125000000
@@ -117,7 +119,7 @@ WORKER PID: 2003553   PPID: 2003551  SysClockS: 1  SysClockNano: 125000000  Term
 WORKER PID: 2003553   PPID: 2003551  SysClockS: 1  SysClockNano: 125000000  TermTimeS: 6  TermTimeNano: 0 ---4 iteration(s) have passed since starting
 OSS: Receiving message from Worker #1 PID 2003553 at time 1:125000000
 ```
-(discuss Round-Robin here)
+**Round-Robin scheduling** allows the execution of each process based on their ordering in the Process Control Block (PCB) table, from first entry to last entry. As shown above, the PCB table's first entry is Process P0 (**2003552**), whereas its last entry is Process P1 (**2003553**). Process P0 must always run before Process P1, then these two children run repeatedly in this particular order until one of them must be terminated. 
 
 #### iv.) Process Termination
 Since the system clock time is greater than (or in this case, equal to) the termination time for Process **2003552**, the child will now terminate.
@@ -140,6 +142,8 @@ Program successfully terminated.
 ```
 
 ### Example 2: Log File Output
+The log file output serves as a consolidation of the output that prints onto the console. Whereas the console outputs *all* detailed information about parent and child processes, the log file only deals with output relating to OSS operations (i.e., those relating to the parent).
+
 ```bash
 OSS: Sending message to Worker #0 PID 1532282 at time 1:479166666
 OSS: Receiving message from Worker #0 PID 1532282 at time 1:479166666
@@ -147,6 +151,9 @@ OSS: Sending message to Worker #1 PID 1532283 at time 1:479166666
 OSS: Receiving message from Worker #1 PID 1532283 at time 1:479166666
 OSS: Sending message to Worker #2 PID 1532284 at time 1:479166666
 ```
+
+A full, real-life example of this output can be viewed by clicking on the **logfile.txt** file in this repository.
+
 ### Example 3: Process Control Block (PCB) Table Output
 Every half second of simulated system time, a Process Table prints to the console as shown below:
 
