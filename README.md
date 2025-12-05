@@ -103,7 +103,7 @@ OSS: Sending message to Worker #0 PID 2003552 at time 1:0
 
 The simulated system clock will continue to iterate until a process can finally terminate. Termination times for Process **2003552** are illustrated by `TermTimeS` and `TermTimeNano` as shown above.
 
-#### iii.) Concurrency
+#### iii.) Concurrency:
 Even though multiple child processes (i.e., **2003552** and **2003553**) exist concurrently in the system, only one child is allowed to send and receive messages to and from the parent process at a time. A modified **Round-Robin scheduling algorithm** decides which child can pass messages at any given time. 
 
 **NOTE:** This algorithm is *modified* since Round-Robin scheduling typically runs processes for a fixed amount of time. For this project, a child does not run for predetermined time periods. It must instead pass messages to and from OSS (i.e., the parent) before the next child can run, which can result in variable runtimes.
@@ -121,13 +121,13 @@ OSS: Receiving message from Worker #1 PID 2003553 at time 1:125000000
 ```
 **Round-Robin scheduling** allows the execution of each process based on their ordering in the Process Control Block (PCB) table, from first entry to last entry. As shown above, the PCB table's first entry is Process P0 (**2003552**), whereas its last entry is Process P1 (**2003553**). Process P0 must always run before Process P1, then these two children run repeatedly in this particular order until one of them must be terminated. 
 
-#### iv.) Process Termination
+#### iv.) Process Termination:
 Since the system clock time is greater than (or in this case, equal to) the termination time for Process **2003552**, the child will now terminate.
 
 ```bash
 WORKER PID: 2003552   PPID: 2003551  SysClockS: 5  SysClockNano: 500000000  TermTimeS: 5  TermTimeNano: 500000000 ---Terminating
 ```
-#### v.) Program Termination
+#### v.) Program Termination:
 Two more process need to run in the system until they reach their termination times and terminate. Child termination is conducted by using a call to **waitpid()**.
 
 ```bash
