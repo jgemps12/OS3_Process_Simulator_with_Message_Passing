@@ -23,7 +23,8 @@ sent by OSS (i.e. the parent) while **Round-Robin Scheduling** determines the or
   - Number of **messages sent**.
 - Ensures clean termination of all processes to avoid zombie processes.
 
-## System Clock Operations:
+## Program Code Operations:
+### Simulated System Clock:
 Throughout the duration of the program, the **simulated system clock** increments at a rate of 
 
 $$
@@ -41,6 +42,14 @@ $$
 
 During this instance as shown above, the clock increments every **62.5 milliseconds**. The number of active processes ranges between 1 and `-s` processes, where `-s` is the maximum number of processes running concurrently. Since child processes constantly enter and exit the system, the system clock will increment at various rates due to `-s` constantly changing. This setup aims to simulate "slowing down" of the clock when the system is busy.
 
+### Message Queue Operations: 
+The two files, *oss.c* and *worker.c*, both utilize two different message queues, `sendBuffer` and `receiveBuffer`. They both operate under a struct that contains two members:
+  - `messageType`- stores the child process's **Process ID (PID)**.
+    - Both *oss.c* and *worker.c* files use this information to determine which child process must receive a message and send it back.
+  - `integerData`- stores one of two numbers: `0` or `1`.
+    - **oss.c** (i.e., the parent) stores a number to determine whether a process occupies a specific row in the Process Control Block (PCB) table.
+    - **worker.c** (i.e., the child) uses this member variable to determine whether a specific process should terminate. `1` is sent to OSS if a process should stay in the        system, whereas `0` is returned if the process should terminate.
+      
 ## How to Compile and Run:
 
 1.) To *compile* the program, type:
