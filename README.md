@@ -42,7 +42,7 @@ $$
 
 During this instance as shown above, the clock increments every **62.5 milliseconds**. The number of active processes ranges between 1 and `-s` processes, where `-s` is the maximum number of processes running concurrently. Since child processes constantly enter and exit the system, the system clock will increment at various rates due to `-s` constantly changing. This setup aims to simulate "slowing down" of the clock when the system is busy.
 
-### Message Queue Operations: 
+### Message Queue: 
 The two files, *oss.c* and *worker.c*, both utilize two different message queues, `sendBuffer` and `receiveBuffer`. They both operate under a struct that contains two members:
   - `messageType`- stores the child process's **Process ID (PID)**.
     - Both *oss.c* and *worker.c* files use this information to determine which child process must receive a message and send it back.
